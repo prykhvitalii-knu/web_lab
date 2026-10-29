@@ -1,0 +1,52 @@
+services:
+  akatosh-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: akatosh_app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://akatosh_user:akatosh_password@akatosh-db:5432/akatosh_db
+      - REDIS_URL=redis://akatosh-redis:6379/0
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      akatosh-db:
+        condition: service_healthy
+      akatosh-redis:
+        condition: service_healthy
+    restart: always
+
+  akatosh-db:
+    image: postgres:15-alpine
+    container_name: akatosh_db
+    environment:
+      POSTGRES_USER: akatosh_user
+      POSTGRES_PASSWORD: akatosh_password
+      POSTGRES_DB: akatosh_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_akatosh_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U akatosh_user -d akatosh_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  akatosh-redis:
+    image: redis:7-alpine
+    container_name: akatosh_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+volumes:
+  postgres_akatosh_data:
