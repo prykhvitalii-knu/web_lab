@@ -7,8 +7,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://akatosh_user:akatosh_password@akatosh-db:5432/akatosh_db
+      - DATABASE_URL=postgresql+psycopg2://akatosh_user:akatosh_password@akatosh-db:5432/akatosh_db
       - REDIS_URL=redis://akatosh-redis:6379/0
+      - RABBITMQ_URL=amqp://akatosh_user:akatosh_password@akatosh-rabbitmq:5672//
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -16,6 +17,45 @@ services:
         condition: service_healthy
       akatosh-redis:
         condition: service_healthy
+      akatosh-rabbitmq:
+        condition: service_healthy
+    restart: always
+
+  akatosh-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: akatosh_worker
+    command: celery -A app.worker.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://akatosh_user:akatosh_password@akatosh-db:5432/akatosh_db
+      - REDIS_URL=redis://akatosh-redis:6379/0
+      - RABBITMQ_URL=amqp://akatosh_user:akatosh_password@akatosh-rabbitmq:5672//
+      - TELEGRAM_BOT_TOKEN=9160567376:AAE1bymo2z7sNvG-KoIJbk8r6ItbnO32vfs
+      - TELEGRAM_CHAT_ID=1273270782
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      akatosh-rabbitmq:
+        condition: service_healthy
+    restart: always
+
+  # Брокер черг повідомлень RabbitMQ для вимоги B8
+  akatosh-rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: akatosh_rabbitmq
+    environment:
+      POSTGRES_USER: akatosh_user
+      RABBITMQ_DEFAULT_USER: akatosh_user
+      RABBITMQ_DEFAULT_PASS: akatosh_password
+    ports:
+      - "5672:5672"    # AMQP порт для надсилання повідомлень
+      - "15672:15672"  # Management Web UI порт
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
   akatosh-db:
