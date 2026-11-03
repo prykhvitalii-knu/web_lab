@@ -42,6 +42,7 @@ RabbitMQ, Redis, Celery, Telegram notifications, and the optional MCP server are
 | **B8 — Message queue** | Celery dispatches background work through RabbitMQ to a separate worker. | `app/main.py`, `app/worker.py`, `docker-compose.yml` |
 | **B2 — Telegram integration** | Local recipes can notify through Celery; the hosted API sends a Telegram message after JSON recipe creation when bot configuration is supplied. | `app/worker.py`, `app/telegram.py`, `app/main.py` |
 | **QA1 — Automated API testing** | Pytest coverage for API behavior, browser flow, and MCP tools. | `tests/test_api.py`, `tests/test_e2e.py`, `tests/test_mcp.py` |
+| **QA2 — E2E testing and coverage** | The browser test covers mobile layout/SEO metadata, account registration and sign-out, plus recipe create, edit, and delete. CI prints Python application line coverage and uploads an HTML report; it does not instrument frontend JavaScript. | `tests/test_e2e.py`, CI coverage artifact |
 | **QA3 — Authentication testing** | Registration/login, protected routes, and Google OAuth callback tests. | `tests/test_api.py` |
 | **C6 — Bootstrap UI** | Responsive recipe-book landing page and account workspace. | `frontend/index.html`, `frontend/assets/app.js`, `frontend/assets/site.css` |
 | **C19 — Static content on AWS S3** | Static frontend assets are stored in S3 and delivered through CloudFront. | `terraform/main.tf`, `frontend/` |

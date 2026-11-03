@@ -39,7 +39,15 @@ jobs:
       run: pytest tests/unit -q
 
     - name: Run API and end-to-end tests
-      run: pytest -q
+      run: pytest -q --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=80
+
+    - name: Upload Python coverage report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-coverage-report
+        path: htmlcov/
+        if-no-files-found: warn
 
     - name: Build Docker images
       run: docker compose build
