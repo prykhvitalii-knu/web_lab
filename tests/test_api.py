@@ -251,6 +251,58 @@ def test_json_recipe_crud_is_tenant_scoped():
     ).status_code == 404
 
 
+def test_json_recipe_list_is_cached_and_invalidated(monkeypatch):
+    cache = {}
+
+    def fake_set(key, value, ex):
+        assert ex == 60
+        cache[key] = value
+
+    def fake_delete(key):
+        cache.pop(key, None)
+
+    monkeypatch.setattr(main_module.redis_client, "get", lambda key: cache.get(key))
+    monkeypatch.setattr(main_module.redis_client, "set", fake_set)
+    monkeypatch.setattr(
+        main_module.redis_client, "scan_iter", lambda pattern: iter(list(cache))
+    )
+    monkeypatch.setattr(main_module.redis_client, "delete", fake_delete)
+    monkeypatch.setattr(main_module, "send_telegram_notification", lambda *args: None)
+    headers = register_and_login("cached@example.com")
+
+    created = client.post(
+        "/api/recipes/",
+        headers=headers,
+        json={"title": "Cached Ale", "style": "Pale Ale", "abv": 5.2, "ibu": 42},
+    )
+    assert created.status_code == 201
+
+    list_url = "/api/recipes/?skip=0&limit=10"
+    first_list = client.get(list_url, headers=headers)
+    assert first_list.status_code == 200
+    assert first_list.json()["items"][0]["title"] == "Cached Ale"
+    assert len(cache) == 1
+    assert next(iter(cache)).startswith("recipes_api_tenant_")
+
+    other_tenant_headers = register_and_login("other-cached@example.com")
+    other_tenant_list = client.get(list_url, headers=other_tenant_headers)
+    assert other_tenant_list.status_code == 200
+    assert other_tenant_list.json()["total"] == 0
+    assert len(cache) == 2
+
+    updated = client.put(
+        f"/api/recipes/{created.json()['id']}",
+        headers=headers,
+        json={"title": "Updated Cached Ale"},
+    )
+    assert updated.status_code == 200
+    assert not cache
+
+    refreshed_list = client.get(list_url, headers=headers)
+    assert refreshed_list.status_code == 200
+    assert refreshed_list.json()["items"][0]["title"] == "Updated Cached Ale"
+
+
 @patch("app.main.send_telegram_notification")
 def test_json_recipe_creation_sends_telegram_notification(mock_telegram):
     headers = register_and_login("telegram@example.com")

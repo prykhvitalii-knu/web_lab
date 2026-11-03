@@ -343,7 +343,7 @@ def list_recipes(
     }
 
     try:
-        redis_client.setex(cache_key, 60, json.dumps(response_data))
+        redis_client.set(cache_key, json.dumps(response_data), ex=60)
     except Exception as e:
         print(f"Redis cache write error: {e}")
 
@@ -552,11 +552,22 @@ def list_recipes_json(
     db: Session = Depends(database.get_db),
 ):
     tenant_id = current_user.tenant_id
+    cache_key = f"recipes_api_tenant_{tenant_id}_skip_{skip}_limit_{limit}"
+    try:
+        cached = redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception as exc:
+        print(f"Redis cache read error: {exc}")
+
     recipes = crud.get_recipes(db, tenant_id, skip=skip, limit=limit)
     total = crud.get_recipes_count(db, tenant_id)
     next_skip = skip + limit
-    return {
-        "items": recipes,
+    response_data = {
+        "items": [
+            schemas.RecipeResponse.model_validate(recipe).model_dump(mode="json")
+            for recipe in recipes
+        ],
         "total": total,
         "skip": skip,
         "limit": limit,
@@ -566,6 +577,13 @@ def list_recipes_json(
             else None
         ),
     }
+
+    try:
+        redis_client.set(cache_key, json.dumps(response_data), ex=60)
+    except Exception as exc:
+        print(f"Redis cache write error: {exc}")
+
+    return response_data
 
 
 @app.get("/api/recipes/{recipe_id}", response_model=schemas.RecipeResponse)
