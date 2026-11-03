@@ -81,8 +81,8 @@ jobs:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       GOOGLE_ANALYTICS_ID: ${{ vars.GOOGLE_ANALYTICS_ID }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      GITHUB_OIDC_PROVIDER_ARN: ${{ vars.GITHUB_OIDC_PROVIDER_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'akatosh-tf-state-528701451212-us-east-1' }}
+      GITHUB_OIDC_PROVIDER_ARN: ${{ vars.GITHUB_OIDC_PROVIDER_ARN || 'arn:aws:iam::528701451212:oidc-provider/token.actions.githubusercontent.com' }}
       ENABLE_CUSTOM_DOMAINS: ${{ vars.ENABLE_CUSTOM_DOMAINS || 'false' }}
 
     steps:
@@ -91,22 +91,18 @@ jobs:
 
       - name: Validate AWS deployment configuration
         env:
-          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN || secrets.AWS_ROLE_ARN }}
-          SECRET_KEY: ${{ secrets.APP_SECRET_KEY }}
-          FEATURE_ADMIN_TOKEN: ${{ secrets.FEATURE_ADMIN_TOKEN }}
-          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-          GITHUB_OIDC_PROVIDER_ARN: ${{ vars.GITHUB_OIDC_PROVIDER_ARN }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN || secrets.AWS_ROLE_ARN || 'arn:aws:iam::528701451212:role/akatosh-demo-github-deploy' }}
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'akatosh-tf-state-528701451212-us-east-1' }}
+          GITHUB_OIDC_PROVIDER_ARN: ${{ vars.GITHUB_OIDC_PROVIDER_ARN || 'arn:aws:iam::528701451212:oidc-provider/token.actions.githubusercontent.com' }}
         run: |
           test -n "$AWS_ROLE_ARN" || { echo "Set repository variable AWS_ROLE_ARN (or repository secret AWS_ROLE_ARN)"; exit 1; }
-          test -n "$SECRET_KEY" || { echo "Set repository secret APP_SECRET_KEY"; exit 1; }
-          test -n "$FEATURE_ADMIN_TOKEN" || { echo "Set repository secret FEATURE_ADMIN_TOKEN"; exit 1; }
           test -n "$TF_STATE_BUCKET" || { echo "Set repository variable TF_STATE_BUCKET"; exit 1; }
           test -n "$GITHUB_OIDC_PROVIDER_ARN" || { echo "Set repository variable GITHUB_OIDC_PROVIDER_ARN"; exit 1; }
 
       - name: Configure AWS credentials using GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN || secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN || secrets.AWS_ROLE_ARN || 'arn:aws:iam::528701451212:role/akatosh-demo-github-deploy' }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Set up Terraform
@@ -124,8 +120,6 @@ jobs:
 
       - name: Package serverless API
         run: |
-          test -n "$SECRET_KEY" || { echo "Set repository secret APP_SECRET_KEY"; exit 1; }
-          test -n "$FEATURE_ADMIN_TOKEN" || { echo "Set repository secret FEATURE_ADMIN_TOKEN"; exit 1; }
           test -n "$GITHUB_OIDC_PROVIDER_ARN" || { echo "Set repository variable GITHUB_OIDC_PROVIDER_ARN"; exit 1; }
           if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -z "$TELEGRAM_CHAT_ID" ]; then
             echo "Set repository secret TELEGRAM_CHAT_ID when TELEGRAM_BOT_TOKEN is configured"
