@@ -52,6 +52,7 @@ resource "aws_iam_role_policy" "github_actions" {
         Action = [
           "s3:CreateBucket",
           "s3:DeleteBucket",
+          "s3:Get*",
           "s3:GetBucket*",
           "s3:GetAccelerateConfiguration",
           "s3:GetLifecycleConfiguration",
