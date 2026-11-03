@@ -29,7 +29,12 @@ resource "aws_iam_role" "github_actions" {
       Condition = {
         StringEquals = {
           "${local.github_oidc_issuer}:aud" = "sts.amazonaws.com"
-          "${local.github_oidc_issuer}:sub" = "repo:${var.github_repository}:ref:refs/heads/main"
+        }
+        StringLike = {
+          "${local.github_oidc_issuer}:sub" = [
+            "repo:${var.github_repository}:ref:refs/heads/main",
+            "repo:prykhvitalii-knu@233604645/web_lab@1438250440:ref:refs/heads/main"
+          ]
         }
       }
     }]
