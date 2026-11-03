@@ -32,7 +32,7 @@ def test_static_html_uses_the_deployed_canonical_and_social_url():
     assert '<meta property="og:url" content="https://example.test/">' in result
 
 
-def test_static_publisher_writes_absolute_crawl_metadata(tmp_path, monkeypatch):
+def test_static_publisher_writes_metadata_and_runtime_ai_config(tmp_path, monkeypatch):
     class FakeS3:
         objects = {}
 
@@ -41,6 +41,13 @@ def test_static_publisher_writes_absolute_crawl_metadata(tmp_path, monkeypatch):
 
         def upload_file(self, filename, bucket, key, ExtraArgs):
             self.objects[key] = {"Body": Path(filename).read_bytes(), **ExtraArgs}
+
+    class FakeSecretsManager:
+        def get_secret_value(self, SecretId):
+            assert SecretId == "test-secret-arn"
+            return {
+                "SecretString": '{"GEMINI_API_KEY": "configured-key", "GEMINI_MODEL": "test"}'
+            }
 
     frontend = tmp_path / "frontend"
     frontend.mkdir()
@@ -53,8 +60,15 @@ def test_static_publisher_writes_absolute_crawl_metadata(tmp_path, monkeypatch):
     (frontend / "sitemap.xml").write_text("<urlset />", encoding="utf-8")
     s3 = FakeS3()
     monkeypatch.setattr(publish_static_site, "FRONTEND_DIR", frontend)
-    monkeypatch.setattr(publish_static_site.boto3, "client", lambda *args, **kwargs: s3)
+    monkeypatch.setattr(
+        publish_static_site.boto3,
+        "client",
+        lambda service, **kwargs: (
+            FakeSecretsManager() if service == "secretsmanager" else s3
+        ),
+    )
     monkeypatch.setenv("STATIC_SITE_BUCKET", "test-bucket")
+    monkeypatch.setenv("APP_SECRETS_ARN", "test-secret-arn")
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     monkeypatch.setenv("PUBLIC_SITE_URL", "https://example.test")
     monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://api.example.test")
@@ -67,3 +81,4 @@ def test_static_publisher_writes_absolute_crawl_metadata(tmp_path, monkeypatch):
         b"<loc>https://example.test/</loc>"
         in s3.objects["sitemap.xml"]["Body"]
     )
+    assert b'"aiAssistantConfigured": true' in s3.objects["config.js"]["Body"]

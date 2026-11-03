@@ -11,6 +11,20 @@ from app import seo
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
 
+def is_ai_assistant_configured(region: str) -> bool:
+    secret_arn = os.getenv("APP_SECRETS_ARN")
+    if not secret_arn:
+        raise RuntimeError("Set APP_SECRETS_ARN to the runtime application secret")
+    response = boto3.client("secretsmanager", region_name=region).get_secret_value(
+        SecretId=secret_arn
+    )
+    settings = json.loads(response["SecretString"])
+    if not isinstance(settings, dict):
+        raise ValueError("The runtime application secret must contain a JSON object")
+    api_key = settings.get("GEMINI_API_KEY")
+    return isinstance(api_key, str) and bool(api_key.strip())
+
+
 def main() -> None:
     bucket = os.getenv("STATIC_SITE_BUCKET")
     if not bucket:
@@ -24,6 +38,7 @@ def main() -> None:
     if not site_url or not site_url.startswith("https://"):
         raise RuntimeError("Set PUBLIC_SITE_URL to the HTTPS website URL")
 
+    ai_assistant_configured = is_ai_assistant_configured(region)
     s3 = boto3.client("s3", region_name=region)
     for path in FRONTEND_DIR.rglob("*"):
         if not path.is_file():
@@ -73,7 +88,7 @@ def main() -> None:
                 {
                     "apiBaseUrl": api_base_url,
                     "googleAnalyticsId": os.getenv("GOOGLE_ANALYTICS_ID", ""),
-                    "aiAssistantConfigured": bool(os.getenv("GEMINI_API_KEY")),
+                    "aiAssistantConfigured": ai_assistant_configured,
                 }
             )
             + ";"
