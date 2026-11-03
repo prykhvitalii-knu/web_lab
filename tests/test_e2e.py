@@ -28,6 +28,7 @@ def running_app(tmp_path_factory):
             "SECRET_KEY": "e2e-test-secret-key-that-is-at-least-32-chars",
             "REDIS_URL": "redis://127.0.0.1:6398/0",
             "FEATURE_ADMIN_TOKEN": "e2e-test-admin-token",
+            "GEMINI_API_KEY": "e2e-test-gemini-key",
         }
     )
     process = subprocess.Popen(
@@ -124,6 +125,23 @@ def test_recipe_book_end_to_end(running_app):
         recipe_card.wait_for()
         assert "5.1% ABV" in recipe_card.inner_text()
         assert "Cascade · 20 g Hop" in recipe_card.inner_text()
+
+        page.route(
+            "**/api/assistant/stream",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="text/event-stream",
+                body=(
+                    'event: progress\ndata: {"message": "Checking recipe tools…"}\n\n'
+                    'data: {"text": "Try a small dry-hop addition."}\n\n'
+                    "event: done\ndata: {}\n\n"
+                ),
+            ),
+        )
+        page.locator("#prompt").fill("How should I improve aroma?")
+        page.get_by_role("button", name="Ask the assistant").click()
+        page.get_by_text("Try a small dry-hop addition.").wait_for()
+        assert page.locator("#assistant-status").inner_text() == "Answer complete."
 
         recipe_card.get_by_role("button", name="Edit recipe").click()
         assert page.locator("#recipe-editor-title").inner_text() == "Edit recipe"

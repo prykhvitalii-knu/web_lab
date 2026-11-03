@@ -441,9 +441,13 @@ assistantForm.addEventListener("submit", async (event) => {
       const events = pending.split("\n\n");
       pending = events.pop() || "";
       for (const eventText of events) {
+        const eventName = eventText.split("\n").find((line) => line.startsWith("event: "))?.slice(7);
         const data = eventText.split("\n").find((line) => line.startsWith("data: "));
         if (!data) continue;
         const payload = JSON.parse(data.slice(6));
+        if (eventName === "progress" && payload.message) {
+          assistantStatus.textContent = payload.message;
+        }
         if (payload.text) assistantAnswer.textContent += payload.text;
         if (payload.error) throw new Error(payload.error);
       }

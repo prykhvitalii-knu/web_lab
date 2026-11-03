@@ -141,6 +141,8 @@ def test_ai_assistant_streams_sse_when_enabled(monkeypatch):
 
     async def fake_gemini_stream(prompt):
         assert prompt == "How do I dry hop an IPA?"
+        yield 'event: progress\ndata: {"message": "Connecting to Gemini…"}\n\n'
+        yield 'event: progress\ndata: {"message": "Gemini is generating a response…"}\n\n'
         yield 'data: {"text": "Add hops"}\n\n'
         yield 'data: {"text": " during fermentation."}\n\n'
         yield "event: done\ndata: {}\n\n"
@@ -153,6 +155,8 @@ def test_ai_assistant_streams_sse_when_enabled(monkeypatch):
     )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: progress" in response.text
+    assert "Gemini is generating a response" in response.text
     assert '"text": "Add hops"' in response.text
     assert '"text": " during fermentation."' in response.text
     assert "event: done" in response.text

@@ -426,12 +426,17 @@ def assistant_error(message: str) -> str:
     return f"event: error\ndata: {json.dumps({'error': message})}\n\n"
 
 
+def assistant_progress(message: str) -> str:
+    return f"event: progress\ndata: {json.dumps({'message': message})}\n\n"
+
+
 async def stream_gemini_response(prompt: str):
     api_key = os.getenv("GEMINI_API_KEY")
     model_name = os.getenv("GEMINI_MODEL") or "gemini-3.6-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent"
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
+    yield assistant_progress("Connecting to Gemini…")
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
             async with client.stream(
@@ -475,6 +480,7 @@ async def stream_gemini_response(prompt: str):
                     yield assistant_error(message)
                     return
 
+                yield assistant_progress("Gemini is generating a response…")
                 async for line in response.aiter_lines():
                     if not line.startswith("data: "):
                         continue
