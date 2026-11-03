@@ -83,7 +83,7 @@ jobs:
       GOOGLE_ANALYTICS_ID: ${{ vars.GOOGLE_ANALYTICS_ID }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'akatosh-tf-state-528701451212-us-east-1' }}
       GITHUB_OIDC_PROVIDER_ARN: ${{ vars.GITHUB_OIDC_PROVIDER_ARN || 'arn:aws:iam::528701451212:oidc-provider/token.actions.githubusercontent.com' }}
-      ENABLE_CUSTOM_DOMAINS: ${{ vars.ENABLE_CUSTOM_DOMAINS || 'false' }}
+      ENABLE_CUSTOM_DOMAINS: ${{ vars.ENABLE_CUSTOM_DOMAINS || 'true' }}
 
     steps:
       - name: Checkout repository

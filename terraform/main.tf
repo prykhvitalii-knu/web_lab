@@ -53,6 +53,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "s3:CreateBucket",
           "s3:DeleteBucket",
           "s3:GetBucket*",
+          "s3:GetAccelerateConfiguration",
           "s3:PutBucket*",
           "s3:ListBucket"
         ]
@@ -124,6 +125,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "ec2:DeleteTags",
           "ec2:DeleteVpc",
           "ec2:DescribeAddresses",
+          "ec2:DescribeAddressesAttribute",
           "ec2:DescribeAvailabilityZones",
           "ec2:DescribeInternetGateways",
           "ec2:DescribeNatGateways",
@@ -224,6 +226,7 @@ resource "aws_iam_role_policy" "github_actions" {
         Action = [
           "secretsmanager:CreateSecret",
           "secretsmanager:DescribeSecret",
+          "secretsmanager:GetResourcePolicy",
           "secretsmanager:DeleteSecret",
           "secretsmanager:PutSecretValue",
           "secretsmanager:TagResource",
