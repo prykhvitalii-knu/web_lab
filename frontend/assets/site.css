@@ -1,0 +1,154 @@
+:root {
+  color-scheme: light;
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+  --ink: #17212b;
+  --muted: #647181;
+  --paper: #f5f7f8;
+}
+
+body {
+  color: var(--ink);
+  background: #fff;
+}
+
+.hero {
+  color: #f5f7fa;
+  background:
+    radial-gradient(ellipse at 82% 8%, rgb(245 158 11 / 22%), transparent 34rem),
+    linear-gradient(120deg, #161b22, #263241);
+}
+
+.py-lg-6 {
+  padding-top: 6rem;
+  padding-bottom: 6rem;
+}
+
+.hero .lead {
+  color: #d3dae2;
+}
+
+.eyebrow {
+  color: #8a5a00;
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.surface-card,
+.empty-state {
+  border: 1px solid #e3e8ec;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 0.25rem 1.2rem rgb(24 39 56 / 5%);
+}
+
+.form-control,
+.btn {
+  border-radius: 0.65rem;
+}
+
+.form-label {
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.divider-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.divider-label::before,
+.divider-label::after {
+  height: 1px;
+  flex: 1;
+  background: #e3e8ec;
+  content: "";
+}
+
+.tenant-details {
+  padding-top: 0.75rem;
+  border-top: 1px solid #e3e8ec;
+}
+
+.tenant-details dt {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.recipe-toolbar {
+  min-height: 2rem;
+}
+
+.empty-state {
+  background: var(--paper);
+}
+
+.empty-icon {
+  font-size: 2.5rem;
+}
+
+.recipe-card {
+  height: 100%;
+  border: 1px solid #e3e8ec;
+  border-radius: 0.9rem;
+}
+
+.recipe-card .card-body {
+  gap: 0.4rem;
+}
+
+.recipe-attachment {
+  text-decoration: none;
+}
+
+.ingredient-row {
+  padding: 0.65rem;
+  border: 1px solid #e3e8ec;
+  border-radius: 0.75rem;
+  background: #f9fafb;
+}
+
+.assistant-panel {
+  color: #f5f7fa;
+  background:
+    radial-gradient(ellipse at 95% 0%, rgb(245 158 11 / 16%), transparent 28rem),
+    #202a35;
+}
+
+.assistant-panel .eyebrow {
+  color: #ffc43d;
+}
+
+.assistant-answer {
+  min-height: 1.5rem;
+  white-space: pre-wrap;
+}
+
+.consent-banner {
+  position: fixed;
+  z-index: 1050;
+  right: 1rem;
+  bottom: 1rem;
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 1rem;
+  color: #f5f7fa;
+  background: #202a35;
+  border-radius: 0.75rem;
+}
+
+@media (max-width: 575.98px) {
+  .py-lg-6 {
+    padding-top: 3rem;
+    padding-bottom: 3rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.6rem, 12vw, 4rem);
+  }
+}

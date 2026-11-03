@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Discover, share, and manage home-brewed beer recipes with Akatosh Beer Recipe Book.">
+  <meta name="keywords" content="beer recipes, home brewing, craft beer, brewing ingredients">
+  <meta name="theme-color" content="#161b22">
+  <title>Akatosh — Beer Recipe Book</title>
+  <link rel="canonical" href="/">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/assets/site.css?v=20261103-4" rel="stylesheet">
+</head>
+<body>
+  <header class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top border-bottom border-secondary-subtle">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="#home">Akatosh</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-navigation" aria-controls="main-navigation" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <nav class="collapse navbar-collapse" id="main-navigation" aria-label="Main navigation">
+        <div class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+          <a class="nav-link" href="#recipes">Recipe book</a>
+          <a class="nav-link" href="#assistant">AI assistant</a>
+          <a class="btn btn-warning btn-sm ms-lg-2" href="#account">Get started</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero py-5 py-lg-6" id="home">
+      <div class="container py-4">
+        <p class="text-uppercase small fw-semibold text-warning mb-2">Your next great brew starts here</p>
+        <h1 class="display-3 fw-bold">Brew something<br>worth sharing.</h1>
+        <p class="lead col-lg-7">A home for your beer recipes, brewing notes, ingredients, and the ideas behind your next batch.</p>
+        <div class="d-flex flex-wrap gap-2 mt-4">
+          <a class="btn btn-warning btn-lg" href="#recipes">Explore the recipe book</a>
+          <a class="btn btn-outline-light btn-lg" href="#account">Start brewing</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="container py-5" id="recipes" aria-labelledby="recipes-title">
+      <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+        <div>
+          <p class="eyebrow mb-1">Your collection</p>
+          <h2 class="h2 mb-0" id="recipes-title">The recipe book</h2>
+          <p class="text-secondary mb-0 mt-2">Recipes are private to your tenant. Sign in to browse or add one.</p>
+        </div>
+        <button id="refresh" class="btn btn-outline-secondary" type="button" disabled>Refresh recipes</button>
+      </div>
+
+      <div class="row g-4 align-items-start">
+        <div class="col-lg-4" id="account">
+          <section class="surface-card p-4" id="auth-panel" aria-labelledby="account-title">
+            <p class="eyebrow">Your account</p>
+            <h2 class="h4" id="account-title">Join the brew book</h2>
+            <p class="text-secondary">Create an account or sign in to manage your recipes.</p>
+            <form id="auth-form" class="vstack gap-3">
+              <div>
+                <label class="form-label" for="email">Email</label>
+                <input id="email" name="email" class="form-control" type="email" autocomplete="email" required>
+              </div>
+              <div>
+                <label class="form-label" for="password">Password</label>
+                <input id="password" name="password" class="form-control" type="password" autocomplete="current-password" minlength="8" required>
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-dark" type="submit" name="action" value="login">Sign in</button>
+                <button class="btn btn-outline-dark" type="submit" name="action" value="register">Create account</button>
+              </div>
+            </form>
+            <div class="divider-label my-3"><span>or</span></div>
+            <a class="btn btn-outline-danger w-100" id="google-login" href="/auth/google/login">Continue with Google</a>
+          </section>
+
+          <section class="surface-card p-4 mt-3 d-none" id="account-session" aria-labelledby="session-title">
+            <div class="d-flex align-items-start justify-content-between gap-2">
+              <div>
+                <p class="eyebrow mb-1">Signed in</p>
+                <h2 class="h5 mb-1" id="session-title">Your brewing workspace</h2>
+                <p class="text-secondary small mb-0" id="account-email"></p>
+              </div>
+              <button id="sign-out" class="btn btn-sm btn-outline-secondary" type="button">Sign out</button>
+            </div>
+            <dl class="tenant-details small mt-3 mb-0">
+              <dt>Tenant workspace</dt>
+              <dd id="tenant-id" class="font-monospace text-break mb-0">Loading…</dd>
+            </dl>
+          </section>
+
+          <p id="status" class="small mt-3 mb-0" role="status" aria-live="polite"></p>
+
+          <section class="surface-card p-4 mt-3 d-none" id="recipe-editor" aria-labelledby="recipe-editor-title">
+            <p class="eyebrow">Share a brew</p>
+            <h2 class="h4" id="recipe-editor-title">Add a recipe</h2>
+            <form id="recipe-form" class="vstack gap-3">
+              <div>
+                <label class="form-label" for="recipe-title">Recipe name</label>
+                <input id="recipe-title" class="form-control" name="title" placeholder="Citra Pale Ale" maxlength="160" required>
+              </div>
+              <div>
+                <label class="form-label" for="recipe-style">Beer style</label>
+                <input id="recipe-style" class="form-control" name="style" placeholder="Pale Ale" maxlength="120" required>
+              </div>
+              <div class="row g-2">
+                <div class="col">
+                  <label class="form-label" for="recipe-abv">ABV %</label>
+                  <input id="recipe-abv" class="form-control" name="abv" type="number" step="0.1" min="0" max="100" placeholder="5.2" required>
+                </div>
+                <div class="col">
+                  <label class="form-label" for="recipe-ibu">IBU</label>
+                  <input id="recipe-ibu" class="form-control" name="ibu" type="number" min="0" max="1000" placeholder="42" required>
+                </div>
+              </div>
+              <div>
+                <label class="form-label" for="recipe-description">Tasting notes</label>
+                <textarea id="recipe-description" class="form-control" name="description" rows="2" maxlength="5000" placeholder="Aroma, flavor, and brew-day notes"></textarea>
+              </div>
+
+              <fieldset>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <legend class="h6 mb-0">Ingredients</legend>
+                  <button class="btn btn-sm btn-outline-secondary" id="add-ingredient" type="button">Add ingredient</button>
+                </div>
+                <div id="ingredient-list" class="vstack gap-2"></div>
+              </fieldset>
+
+              <div>
+                <label class="form-label" for="recipe-file">Recipe file <span class="text-secondary">(optional)</span></label>
+                <input id="recipe-file" class="form-control" type="file" name="file" accept=".pdf,.txt,.csv,.json,.xml">
+                <div class="form-text">Attach a recipe sheet or brewing notes. Stored privately; download links are temporary.</div>
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-warning" type="submit" id="save-recipe">Save recipe</button>
+                <button class="btn btn-outline-secondary d-none" type="button" id="cancel-edit">Cancel edit</button>
+              </div>
+              <p id="recipe-status" class="small mb-0" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+        </div>
+
+        <div class="col-lg-8">
+          <div class="recipe-toolbar d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div class="small text-secondary" id="recipe-count" aria-live="polite">Sign in to load your tenant's recipes.</div>
+          </div>
+          <div id="recipe-list" class="row g-3">
+            <div class="col-12">
+              <div class="empty-state p-5 text-center">
+                <span class="empty-icon" aria-hidden="true">🍻</span>
+                <h3 class="h5 mt-3">Your next recipe starts here</h3>
+                <p class="text-secondary mb-0">Sign in to see your recipes or create the first one.</p>
+              </div>
+            </div>
+          </div>
+          <div class="text-center mt-4">
+            <button id="load-more" class="btn btn-outline-dark d-none" type="button">Load more recipes</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="py-5" id="assistant">
+      <div class="container">
+        <div class="assistant-panel rounded-4 p-4 p-lg-5">
+          <div class="row g-4 align-items-center">
+            <div class="col-lg-5">
+              <p class="eyebrow text-warning">AI brewing assistant · C21</p>
+              <h2 class="h2" id="assistant-title">Good beer starts with a good question.</h2>
+              <p class="text-light-emphasis mb-0">Ask about ingredients, fermentation, recipe balance, or brew-day troubleshooting. Responses stream as they arrive.</p>
+            </div>
+            <div class="col-lg-7">
+              <form id="assistant-form" class="vstack gap-2">
+                <label for="prompt" class="form-label">Your brewing question</label>
+                <div class="d-flex flex-column flex-sm-row gap-2">
+                  <input id="prompt" class="form-control" maxlength="1000" placeholder="How can I improve the aroma of my pale ale?" required>
+                  <button class="btn btn-warning flex-shrink-0" id="ask-assistant" type="submit">Ask the assistant</button>
+                </div>
+              </form>
+              <p id="assistant-status" class="small text-light-emphasis mt-2 mb-0" role="status" aria-live="polite"></p>
+              <div id="assistant-answer" class="assistant-answer mt-3" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <aside id="analytics-consent" class="consent-banner shadow-lg" aria-label="Analytics preferences" hidden>
+    <p class="mb-2">Allow anonymous analytics to help improve this recipe book?</p>
+    <button id="analytics-accept" class="btn btn-sm btn-warning" type="button">Allow analytics</button>
+    <button id="analytics-decline" class="btn btn-sm btn-outline-light ms-2" type="button">No thanks</button>
+  </aside>
+
+  <footer class="bg-dark text-light py-4">
+    <div class="container d-flex flex-column flex-sm-row justify-content-between gap-2">
+      <span>Akatosh Beer Recipe Book</span>
+      <a class="link-light" href="#home">Back to top ↑</a>
+    </div>
+  </footer>
+
+  <script src="/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" defer></script>
+  <script src="/assets/app.js?v=20261103-5" defer></script>
+</body>
+</html>

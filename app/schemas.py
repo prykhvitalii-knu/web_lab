@@ -1,7 +1,6 @@
 from typing import List, Optional
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 
-# --- AUTH & USER ---
 class UserBase(BaseModel):
     email: EmailStr
 
@@ -21,11 +20,13 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
-# --- INGREDIENT ---
 class IngredientBase(BaseModel):
     name: str
     amount_grams: float
     ingredient_type: str
+
+class IngredientCreate(IngredientBase):
+    pass
 
 class IngredientResponse(IngredientBase):
     id: int
@@ -33,7 +34,6 @@ class IngredientResponse(IngredientBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-# --- RECIPE ---
 class RecipeBase(BaseModel):
     title: str
     style: str
@@ -41,11 +41,22 @@ class RecipeBase(BaseModel):
     ibu: int
     description: Optional[str] = None
 
+class RecipeCreate(RecipeBase):
+    ingredients: List[IngredientCreate] = Field(default_factory=list)
+
+class RecipeUpdate(BaseModel):
+    title: Optional[str] = None
+    style: Optional[str] = None
+    abv: Optional[float] = None
+    ibu: Optional[int] = None
+    description: Optional[str] = None
+    ingredients: Optional[List[IngredientCreate]] = None
+
 class RecipeResponse(RecipeBase):
     id: int
     file_path: Optional[str] = None
     owner_id: int
-    ingredients: List[IngredientResponse] = []
+    ingredients: List[IngredientResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -55,3 +66,9 @@ class PaginatedRecipesResponse(BaseModel):
     skip: int
     limit: int
     next_link: Optional[str] = None
+
+class FeatureFlagUpdate(BaseModel):
+    enabled: bool
+
+class AssistantPrompt(BaseModel):
+    prompt: str = Field(min_length=1, max_length=1000)
