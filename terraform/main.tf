@@ -91,6 +91,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "lambda:GetFunction",
           "lambda:GetFunctionConfiguration",
           "lambda:GetFunctionCodeSigningConfig",
+          "lambda:GetPolicy",
           "lambda:UpdateFunctionCode",
           "lambda:UpdateFunctionConfiguration",
           "lambda:AddPermission",
