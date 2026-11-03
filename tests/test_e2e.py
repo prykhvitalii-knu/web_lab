@@ -125,6 +125,16 @@ def test_recipe_book_end_to_end(running_app):
         recipe_card.wait_for()
         assert "5.1% ABV" in recipe_card.inner_text()
         assert "Cascade · 20 g Hop" in recipe_card.inner_text()
+        recipe_card.get_by_role("button", name="View details").click()
+        detail_modal = page.locator("#recipe-details-modal")
+        detail_modal.wait_for(state="visible")
+        assert page.locator("#recipe-detail-title").inner_text() == "E2E Golden Ale"
+        assert page.locator("#recipe-detail-abv").inner_text() == "5.1%"
+        assert page.locator("#recipe-detail-ingredients").inner_text() == "Cascade · 20 g Hop"
+        detail_modal.locator(".modal-footer").get_by_role(
+            "button", name="Close"
+        ).click()
+        detail_modal.wait_for(state="hidden")
 
         page.route(
             "**/api/assistant/stream",

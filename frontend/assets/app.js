@@ -14,6 +14,7 @@ const assistantForm = document.querySelector("#assistant-form");
 const assistantStatus = document.querySelector("#assistant-status");
 const assistantAnswer = document.querySelector("#assistant-answer");
 const ingredientList = document.querySelector("#ingredient-list");
+const recipeDetailsModal = document.querySelector("#recipe-details-modal");
 
 let accessToken = "";
 let nextRecipesLink = null;
@@ -98,6 +99,39 @@ function collectIngredients() {
     .filter((ingredient) => ingredient.name && ingredient.amount_grams > 0);
 }
 
+function showRecipeDetails(recipe) {
+  document.querySelector("#recipe-detail-title").textContent = recipe.title;
+  document.querySelector("#recipe-detail-style").textContent = recipe.style;
+  document.querySelector("#recipe-detail-abv").textContent = `${recipe.abv}%`;
+  document.querySelector("#recipe-detail-ibu").textContent = `${recipe.ibu} IBU`;
+  document.querySelector("#recipe-detail-description").textContent =
+    recipe.description || "No tasting or brew-day notes have been added.";
+
+  const ingredients = document.querySelector("#recipe-detail-ingredients");
+  ingredients.replaceChildren();
+  for (const ingredient of recipe.ingredients || []) {
+    const item = document.createElement("li");
+    item.textContent = `${ingredient.name} · ${ingredient.amount_grams} g ${ingredient.ingredient_type}`;
+    ingredients.append(item);
+  }
+  document.querySelector("#recipe-detail-no-ingredients").classList.toggle(
+    "d-none",
+    Boolean(recipe.ingredients?.length),
+  );
+
+  const fileContainer = document.querySelector("#recipe-detail-file");
+  fileContainer.replaceChildren();
+  if (recipe.file_path) {
+    const download = document.createElement("button");
+    download.className = "btn btn-sm btn-outline-primary";
+    download.textContent = "Download attached file";
+    download.addEventListener("click", () => downloadRecipeFile(recipe.id, download));
+    fileContainer.append(download);
+  }
+
+  window.bootstrap.Modal.getOrCreateInstance(recipeDetailsModal).show();
+}
+
 function createRecipeCard(recipe) {
   const column = document.createElement("div");
   column.className = "col-md-6";
@@ -120,6 +154,12 @@ function createRecipeCard(recipe) {
   description.textContent = recipe.description || "A recipe ready for your brewing notes.";
 
   body.append(title, style, facts, description);
+  const details = document.createElement("button");
+  details.className = "btn btn-sm btn-outline-dark align-self-start";
+  details.textContent = "View details";
+  details.addEventListener("click", () => showRecipeDetails(recipe));
+  body.append(details);
+
   if (recipe.ingredients?.length) {
     const ingredientHeading = document.createElement("h4");
     ingredientHeading.className = "h6 mt-2";

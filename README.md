@@ -44,7 +44,7 @@ RabbitMQ, Redis, Celery, Telegram notifications, and MCP are demonstrated in the
 | **QA1 — Automated API testing** | Pytest coverage for API behavior, browser flow, and MCP tools. | `tests/test_api.py`, `tests/test_e2e.py`, `tests/test_mcp.py` |
 | **QA2 — E2E testing and coverage** | The browser test covers mobile layout/SEO metadata, account registration and sign-out, plus recipe create, edit, and delete. CI prints Python application line coverage and uploads an HTML report; it does not instrument frontend JavaScript. | `tests/test_e2e.py`, CI coverage artifact |
 | **QA3 — Authentication testing** | Registration/login, protected routes, and Google OAuth callback tests. | `tests/test_api.py` |
-| **C6 — Bootstrap UI** | Responsive recipe-book landing page and account workspace. | `frontend/index.html`, `frontend/assets/app.js`, `frontend/assets/site.css` |
+| **C6 — Bootstrap UI** | Responsive recipe-book interface with an accessible Bootstrap modal for each tenant's recipe details. | `frontend/index.html`, `frontend/assets/app.js`, `frontend/assets/site.css` |
 | **C19 — Static content on AWS S3** | Static frontend assets are stored in S3 and delivered through CloudFront. | `terraform/main.tf`, `frontend/` |
 | **C7 — SEO** | The public homepage has an absolute canonical and social URL; `robots.txt` points to an absolute sitemap. Private tenant recipes are intentionally excluded. Automated tests validate the generated files, but Search Console indexing still needs external verification. | `app/seo.py`, `scripts/publish_static_site.py`, `frontend/` |
 | **C21 — AI agent** | Gemini streams answers and visible progress updates, including when a tenant-scoped MCP recipe tool is called. | `app/main.py`, `frontend/assets/app.js` |
