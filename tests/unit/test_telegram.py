@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import Mock, patch
 
 from app.telegram import send_telegram_notification
@@ -37,15 +38,16 @@ def test_send_notification_skips_without_configuration():
     post.assert_not_called()
 
 
-def test_send_notification_returns_false_when_telegram_rejects_request():
-    response = Mock(is_error=False)
+def test_send_notification_returns_false_and_logs_error_description(caplog):
+    response = Mock(is_error=True, status_code=400)
     response.json.return_value = {
         "ok": False,
         "error_code": 400,
-        "description": "chat not found",
+        "description": "Bad Request: chat not found",
     }
 
     with (
+        caplog.at_level(logging.WARNING, logger="app.telegram"),
         patch.dict(
             "os.environ",
             {"TELEGRAM_BOT_TOKEN": "123:token", "TELEGRAM_CHAT_ID": "456"},
@@ -55,3 +57,14 @@ def test_send_notification_returns_false_when_telegram_rejects_request():
         sent = send_telegram_notification("Pale Ale", "IPA", 6.5)
 
     assert sent is False
+    assert "Bad Request: chat not found" in caplog.text
+    assert "123:token" not in caplog.text
+
+
+def test_httpx_telegram_request_log_does_not_expose_bot_token(caplog):
+    with caplog.at_level(logging.INFO, logger="httpx"):
+        logging.getLogger("httpx").info(
+            "HTTP Request: POST https://api.telegram.org/botprivate-token/sendMessage 400 Bad Request"
+        )
+
+    assert "private-token" not in caplog.text

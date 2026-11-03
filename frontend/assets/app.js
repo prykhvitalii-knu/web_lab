@@ -16,7 +16,9 @@ const assistantAnswer = document.querySelector("#assistant-answer");
 const ingredientList = document.querySelector("#ingredient-list");
 const recipeDetailsModal = document.querySelector("#recipe-details-modal");
 
-let accessToken = "";
+const accessToken = "";
+let csrfToken = "";
+let isAuthenticated = false;
 let nextRecipesLink = null;
 let totalRecipes = 0;
 let loadedRecipes = 0;
@@ -35,12 +37,18 @@ function setStatus(message, isError = false) {
 
 async function apiRequest(path, options = {}) {
   const isFormData = options.body instanceof FormData;
+  const requestHeaders = new Headers(options.headers);
+  requestHeaders.delete("Authorization");
   const response = await fetch(apiUrl(path), {
     ...options,
+    credentials: "include",
     headers: {
       ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...options.headers,
+      ...Object.fromEntries(requestHeaders.entries()),
+      ...(csrfToken && !["GET", "HEAD", "OPTIONS"].includes((options.method || "GET").toUpperCase())
+        ? { "X-CSRF-Token": csrfToken }
+        : {}),
     },
   });
   if (!response.ok) {
@@ -250,7 +258,7 @@ function showEmptyRecipes(message) {
 }
 
 async function loadRecipes({ reset = true } = {}) {
-  if (!accessToken) return;
+  if (!isAuthenticated) return;
   if (reset) {
     loadedRecipes = 0;
     nextRecipesLink = "/api/recipes/?skip=0&limit=12";
@@ -282,7 +290,7 @@ async function loadRecipes({ reset = true } = {}) {
 }
 
 async function loadTenantInfo() {
-  if (!accessToken) return;
+  if (!isAuthenticated) return;
   try {
     const tenant = await apiRequest("/tenant/info");
     if (tenant.user_email) accountEmail.textContent = tenant.user_email;
@@ -293,6 +301,7 @@ async function loadTenantInfo() {
 }
 
 function enterSession(email, provider) {
+  isAuthenticated = true;
   authPanel.classList.add("d-none");
   accountSession.classList.remove("d-none");
   recipeEditor.classList.remove("d-none");
@@ -336,9 +345,16 @@ function editRecipe(recipe) {
   recipeEditor.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function signOut() {
+async function signOut() {
+  try {
+    await apiRequest("/auth/logout", { method: "POST" });
+  } catch (error) {
+    setStatus(error.message, true);
+    return;
+  }
   resetRecipeForm();
-  accessToken = "";
+  csrfToken = "";
+  isAuthenticated = false;
   authForm.reset();
   authPanel.classList.remove("d-none");
   accountSession.classList.add("d-none");
@@ -367,6 +383,7 @@ authForm.addEventListener("submit", async (event) => {
     if (action === "register") {
       const registration = await fetch(apiUrl("/register"), {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
@@ -375,8 +392,9 @@ authForm.addEventListener("submit", async (event) => {
         throw new Error(body.detail || `Registration failed (${registration.status})`);
       }
     }
-    const response = await fetch(apiUrl("/login"), {
+    const response = await fetch(apiUrl("/auth/session/login"), {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ username: email, password }),
     });
@@ -384,8 +402,9 @@ authForm.addEventListener("submit", async (event) => {
       const result = await response.json().catch(() => ({}));
       throw new Error(result.detail || `Login failed (${response.status})`);
     }
-    accessToken = (await response.json()).access_token;
-    enterSession(email, "email");
+    const session = await response.json();
+    csrfToken = session.csrf_token;
+    enterSession(session.email || email, "email");
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -446,7 +465,7 @@ recipeForm.addEventListener("submit", async (event) => {
 assistantForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   assistantAnswer.textContent = "";
-  if (!accessToken) {
+  if (!isAuthenticated) {
     assistantStatus.textContent = "Sign in first so the assistant can check your tenant's feature flag.";
     assistantStatus.className = "small text-warning mt-2 mb-0";
     return;
@@ -461,8 +480,9 @@ assistantForm.addEventListener("submit", async (event) => {
   assistantStatus.textContent = "Connecting to Gemini…";
   assistantStatus.className = "small text-light-emphasis mt-2 mb-0";
   try {
-    const response = await fetch(apiUrl("/api/assistant/stream"), {
+    const response = await apiRequest("/api/assistant/stream", {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
@@ -518,11 +538,16 @@ document.querySelector("#recipe-file").addEventListener("change", (event) => {
   }
 });
 
-const tokenFromCallback = new URLSearchParams(window.location.hash.slice(1)).get("access_token");
-if (tokenFromCallback) {
-  accessToken = tokenFromCallback;
-  window.history.replaceState(null, "", window.location.pathname + window.location.search);
-  enterSession("", "Google");
+async function restoreSession() {
+  const response = await fetch(apiUrl("/auth/session"), { credentials: "include" });
+  if (response.status === 401) return;
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `Session restore failed (${response.status})`);
+  }
+  const session = await response.json();
+  csrfToken = session.csrf_token || "";
+  enterSession(session.email, "account");
 }
 
 const measurementId = window.APP_CONFIG?.googleAnalyticsId;
@@ -556,3 +581,4 @@ if (localStorage.getItem("akatosh-analytics-consent") === "accepted") {
 }
 
 addIngredientRow();
+restoreSession().catch((error) => setStatus(error.message, true));

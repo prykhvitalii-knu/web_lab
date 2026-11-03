@@ -175,13 +175,14 @@ def test_recipe_book_end_to_end(running_app):
         updated_recipe_card.get_by_role("button", name="Delete recipe").click()
         page.get_by_text("No recipes yet. Add one with the form to get started.").wait_for()
 
-        page.goto(f"{running_app}/#access_token=google-callback-token")
+        page.reload(wait_until="networkidle")
         page.locator("#account-session").wait_for(state="visible")
+        assert page.locator("#account-email").inner_text() == "e2e-brewer@example.com"
         assert page.locator("#auth-panel").is_hidden()
         assert page.locator("#recipe-editor").is_visible()
 
         page.get_by_role("button", name="Sign out").click()
-        assert page.locator("#auth-panel").is_visible()
-        assert page.locator("#account-session").is_hidden()
-        assert page.locator("#recipe-editor").is_hidden()
+        page.locator("#auth-panel").wait_for(state="visible")
+        page.locator("#account-session").wait_for(state="hidden")
+        page.locator("#recipe-editor").wait_for(state="hidden")
         browser.close()

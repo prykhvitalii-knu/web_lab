@@ -7,6 +7,14 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+class TelegramRequestLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "api.telegram.org" not in record.getMessage()
+
+
+logging.getLogger("httpx").addFilter(TelegramRequestLogFilter())
+
+
 def send_telegram_notification(recipe_title: str, style: str, abv: float) -> bool:
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
@@ -30,24 +38,26 @@ def send_telegram_notification(recipe_title: str, style: str, abv: float) -> boo
         logger.warning("Telegram notification request failed")
         return False
 
-    if response.is_error:
-        logger.warning(
-            "Telegram notification failed with HTTP status %s",
-            response.status_code,
-        )
-        return False
-
     try:
         result = response.json()
     except ValueError:
         logger.warning("Telegram returned an invalid notification response")
         return False
 
-    if result.get("ok") is not True:
+    if not isinstance(result, dict):
+        logger.warning("Telegram returned an invalid notification response")
+        return False
+
+    if response.is_error or result.get("ok") is not True:
+        description = result.get("description")
+        if isinstance(description, str):
+            description = " ".join(description.split())[:300]
+        else:
+            description = "No error description provided"
         logger.warning(
             "Telegram rejected notification: code=%s, description=%s",
-            result.get("error_code"),
-            result.get("description"),
+            result.get("error_code", response.status_code),
+            description,
         )
         return False
 

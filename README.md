@@ -27,6 +27,8 @@ The static website bucket and upload bucket block public access. CloudFront read
 
 RabbitMQ, Redis, Celery, Telegram notifications, and MCP are demonstrated in the local Compose environment. The assistant starts an MCP stdio client for the authenticated tenant and exposes read-only recipe tools to Gemini; the hosted AWS assistant does not start MCP. The live site is [akatosh.local-domain.party](https://akatosh.local-domain.party); the API's interactive documentation is at [api.akatosh.local-domain.party/docs](https://api.akatosh.local-domain.party/docs).
 
+Browser sign-in uses an HttpOnly JWT cookie, so refreshes restore the session without exposing the token to JavaScript. Cookie-authenticated writes require a CSRF token; Bearer-token API clients remain supported.
+
 ## Lab points and where to find them
 
 | Point | Demonstration | Implementation |

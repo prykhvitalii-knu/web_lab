@@ -3,8 +3,6 @@ import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
-from urllib.parse import parse_qs, urlparse
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -76,6 +74,51 @@ def test_user_registration_and_login():
     assert data["token_type"] == "bearer"
 
 
+def test_cookie_session_survives_refresh_and_requires_csrf(monkeypatch):
+    monkeypatch.setenv("SESSION_HTTPS_ONLY", "false")
+    monkeypatch.setenv("FEATURE_ADMIN_TOKEN", "test-admin-token")
+    registration = client.post(
+        "/register",
+        json={"email": "cookie-user@example.com", "password": "securepassword123"},
+    )
+    assert registration.status_code == 201
+
+    login_response = client.post(
+        "/auth/session/login",
+        data={"username": "cookie-user@example.com", "password": "securepassword123"},
+    )
+    assert login_response.status_code == 200
+    assert "access_token" not in login_response.json()
+    assert "httponly" in login_response.headers["set-cookie"].lower()
+    assert "samesite=lax" in login_response.headers["set-cookie"].lower()
+    assert client.get("/features/").status_code == 200
+
+    session = client.get("/auth/session")
+    assert session.status_code == 200
+    assert session.json()["email"] == "cookie-user@example.com"
+    csrf_token = session.json()["csrf_token"]
+
+    update_url = "/features/enable_ai_suggestions"
+    update_data = {"enabled": True}
+    admin_headers = {"X-Feature-Admin-Token": "test-admin-token"}
+    rejected = client.put(update_url, json=update_data, headers=admin_headers)
+    assert rejected.status_code == 403
+    assert rejected.json()["detail"] == "CSRF token missing or invalid"
+
+    accepted = client.put(
+        update_url,
+        json=update_data,
+        headers={**admin_headers, "X-CSRF-Token": csrf_token},
+    )
+    assert accepted.status_code == 200
+
+    logout_response = client.post(
+        "/auth/logout", headers={"X-CSRF-Token": csrf_token}
+    )
+    assert logout_response.status_code == 204
+    assert client.get("/auth/session").status_code == 401
+
+
 def test_unauthorized_access():
     response = client.get("/features/")
     assert response.status_code == 401
@@ -94,7 +137,9 @@ def test_google_oauth_requires_configuration(monkeypatch):
     assert response.status_code == 503
 
 
-def test_google_oauth_callback_issues_bearer_token(monkeypatch):
+def test_google_oauth_callback_establishes_cookie_session(monkeypatch):
+    monkeypatch.setenv("SESSION_HTTPS_ONLY", "false")
+
     class FakeGoogleClient:
         async def authorize_access_token(self, request):
             return {
@@ -109,10 +154,12 @@ def test_google_oauth_callback_issues_bearer_token(monkeypatch):
     )
     response = client.get("/auth/google/callback", follow_redirects=False)
     assert response.status_code == 303
-    assert "#access_token=" in response.headers["location"]
-
-    token = parse_qs(urlparse(response.headers["location"]).fragment)["access_token"][0]
-    protected = client.get("/features/", headers={"Authorization": f"Bearer {token}"})
+    assert "#access_token=" not in response.headers["location"]
+    assert "httponly" in response.headers["set-cookie"].lower()
+    session = client.get("/auth/session")
+    assert session.status_code == 200
+    assert session.json()["email"] == "google-user@example.com"
+    protected = client.get("/features/")
     assert protected.status_code == 200
 
 

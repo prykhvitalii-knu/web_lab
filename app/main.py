@@ -5,7 +5,6 @@ import shutil
 import uuid
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 from contextlib import AsyncExitStack
 import boto3
 import httpx
@@ -45,9 +44,9 @@ if allowed_origins:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
-        allow_credentials=False,
+        allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
     )
 app.add_middleware(
     SessionMiddleware,
@@ -113,6 +112,65 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     access_token = auth.create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+def set_session_cookie(response: Response, access_token: str) -> None:
+    secure_cookie = os.getenv("SESSION_HTTPS_ONLY", "false").lower() == "true"
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        max_age=auth.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="none" if secure_cookie else "lax",
+        path="/",
+    )
+
+
+@app.post("/auth/session/login")
+def session_login(
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(database.get_db),
+):
+    user = crud.get_user_by_email(db, form_data.username)
+    if not user or not auth.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
+    access_token = auth.create_access_token(data={"sub": user.email})
+    set_session_cookie(response, access_token)
+    return {
+        "email": user.email,
+        "csrf_token": auth.create_csrf_token(access_token),
+    }
+
+
+@app.get("/auth/session")
+def get_auth_session(
+    request: Request,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    access_token = request.cookies.get("access_token")
+    return {
+        "email": current_user.email,
+        "csrf_token": auth.create_csrf_token(access_token) if access_token else None,
+    }
+
+
+@app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    response: Response,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    secure_cookie = os.getenv("SESSION_HTTPS_ONLY", "false").lower() == "true"
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        httponly=True,
+        secure=secure_cookie,
+        samesite="none" if secure_cookie else "lax",
+    )
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
 
 
 def get_google_oauth_client():
@@ -182,10 +240,12 @@ async def google_callback(
 
     access_token = auth.create_access_token(data={"sub": user.email})
     frontend_url = os.getenv("PUBLIC_SITE_URL", str(request.base_url)).rstrip("/")
-    return RedirectResponse(
-        f"{frontend_url}/#access_token={quote(access_token, safe='')}",
+    response = RedirectResponse(
+        f"{frontend_url}/",
         status_code=status.HTTP_303_SEE_OTHER,
     )
+    set_session_cookie(response, access_token)
+    return response
 
 
 @app.get("/features/")
