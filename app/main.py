@@ -539,7 +539,12 @@ def create_recipe_json(
         current_user.id,
         recipe_data.ingredients,
     )
-    send_telegram_notification(recipe.title, recipe.style, recipe.abv)
+    if os.getenv("RABBITMQ_URL"):
+        send_telegram_notification_task.delay(
+            recipe.title, recipe.style, recipe.abv
+        )
+    else:
+        send_telegram_notification(recipe.title, recipe.style, recipe.abv)
     invalidate_recipe_cache()
     return recipe
 

@@ -303,8 +303,14 @@ def test_json_recipe_list_is_cached_and_invalidated(monkeypatch):
     assert refreshed_list.json()["items"][0]["title"] == "Updated Cached Ale"
 
 
-@patch("app.main.send_telegram_notification")
-def test_json_recipe_creation_sends_telegram_notification(mock_telegram):
+def test_json_recipe_creation_queues_telegram_notification(monkeypatch):
+    monkeypatch.setenv("RABBITMQ_URL", "amqp://test-broker")
+    queued_notifications = []
+    monkeypatch.setattr(
+        main_module.send_telegram_notification_task,
+        "delay",
+        lambda *args: queued_notifications.append(args),
+    )
     headers = register_and_login("telegram@example.com")
 
     response = client.post(
@@ -314,7 +320,27 @@ def test_json_recipe_creation_sends_telegram_notification(mock_telegram):
     )
 
     assert response.status_code == 201
-    mock_telegram.assert_called_once_with("Telegram Ale", "Pale Ale", 5.2)
+    assert queued_notifications == [("Telegram Ale", "Pale Ale", 5.2)]
+
+
+def test_json_recipe_creation_sends_telegram_without_queue(monkeypatch):
+    monkeypatch.delenv("RABBITMQ_URL", raising=False)
+    sent_notifications = []
+    monkeypatch.setattr(
+        main_module,
+        "send_telegram_notification",
+        lambda *args: sent_notifications.append(args),
+    )
+    headers = register_and_login("telegram-sync@example.com")
+
+    response = client.post(
+        "/api/recipes/",
+        headers=headers,
+        json={"title": "Direct Ale", "style": "Pale Ale", "abv": 5.2, "ibu": 42},
+    )
+
+    assert response.status_code == 201
+    assert sent_notifications == [("Direct Ale", "Pale Ale", 5.2)]
 
 
 def test_feature_flags_are_tenant_scoped_and_admin_managed(monkeypatch):
