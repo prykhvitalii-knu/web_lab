@@ -549,6 +549,22 @@ async def stream_gemini_response(prompt: str, tenant_id: str):
                         json=payload,
                     ) as response:
                         if response.is_error:
+                            await response.aread()
+                            provider_message = None
+                            try:
+                                provider_error = json.loads(response.content).get("error")
+                                if isinstance(provider_error, dict):
+                                    provider_message = provider_error.get("message")
+                            except (json.JSONDecodeError, AttributeError, TypeError):
+                                pass
+                            if isinstance(provider_message, str):
+                                provider_message = " ".join(provider_message.split())
+                                if api_key:
+                                    provider_message = provider_message.replace(
+                                        api_key, "[redacted]"
+                                    )
+                                provider_message = provider_message[:300]
+
                             if response.status_code in {401, 403}:
                                 message = (
                                     "Gemini rejected the API key or the key lacks API access "
@@ -578,7 +594,8 @@ async def stream_gemini_response(prompt: str, tenant_id: str):
                                     "Gemini could not complete the request "
                                     f"(HTTP {response.status_code})."
                                 )
-                            await response.aread()
+                            if provider_message:
+                                message = f"{message} Provider detail: {provider_message}"
                             yield assistant_error(message)
                             return
 

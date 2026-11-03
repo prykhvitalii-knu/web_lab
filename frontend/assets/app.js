@@ -35,6 +35,23 @@ function setStatus(message, isError = false) {
   statusMessage.classList.toggle("text-danger", isError);
 }
 
+function readableError(value, fallback) {
+  if (typeof value === "string" && value.trim()) return value;
+  if (Array.isArray(value)) {
+    const messages = value.map((item) => readableError(item, "")).filter(Boolean);
+    if (messages.length) return messages.join("; ");
+  }
+  if (value && typeof value === "object") {
+    for (const key of ["message", "detail", "msg", "error"]) {
+      if (key in value) {
+        const message = readableError(value[key], "");
+        if (message) return message;
+      }
+    }
+  }
+  return fallback;
+}
+
 async function apiRequest(path, options = {}) {
   const isFormData = options.body instanceof FormData;
   const requestHeaders = new Headers(options.headers);
@@ -53,7 +70,9 @@ async function apiRequest(path, options = {}) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || `Request failed (${response.status})`);
+    throw new Error(
+      readableError(body.detail, `Request failed (${response.status})`),
+    );
   }
   if (response.status === 204) return null;
   if (response.headers.get("content-type")?.includes("application/json")) {
@@ -491,7 +510,9 @@ assistantForm.addEventListener("submit", async (event) => {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.detail || `Assistant failed (${response.status})`);
+      throw new Error(
+        readableError(body.detail, `Assistant failed (${response.status})`),
+      );
     }
     assistantStatus.textContent = "Streaming answer…";
     const reader = response.body.getReader();
@@ -511,7 +532,9 @@ assistantForm.addEventListener("submit", async (event) => {
           assistantStatus.textContent = payload.message;
         }
         if (payload.text) assistantAnswer.textContent += payload.text;
-        if (payload.error) throw new Error(payload.error);
+        if (payload.error) {
+          throw new Error(readableError(payload.error, "The assistant request failed."));
+        }
       }
       if (done) break;
     }
@@ -519,7 +542,7 @@ assistantForm.addEventListener("submit", async (event) => {
       ? "Answer complete."
       : "The assistant returned an empty answer. Please try again.";
   } catch (error) {
-    assistantStatus.textContent = error.message;
+    assistantStatus.textContent = readableError(error, "The assistant request failed.");
     assistantStatus.className = "small text-danger mt-2 mb-0";
   } finally {
     askButton.disabled = false;

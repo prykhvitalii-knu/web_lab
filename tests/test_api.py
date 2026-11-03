@@ -529,6 +529,54 @@ def test_gemini_payment_error_points_to_billing(monkeypatch):
     assert "Google AI Studio billing page" in result
 
 
+def test_gemini_provider_error_includes_safe_provider_detail(monkeypatch):
+    class FakeResponse:
+        is_error = True
+        status_code = 400
+        content = b'{"error":{"message":"Invalid argument: unsupported setting"}}'
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def aread(self):
+            return self.content
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def stream(self, *args, **kwargs):
+            return FakeResponse()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "sensitive-test-key")
+    monkeypatch.delenv("MCP_AGENT_ENABLED", raising=False)
+    monkeypatch.setattr(main_module.httpx, "AsyncClient", FakeClient)
+
+    async def collect():
+        return "".join(
+            [
+                event
+                async for event in main_module.stream_gemini_response(
+                    "Ales", "tenant-a"
+                )
+            ]
+        )
+
+    result = asyncio.run(collect())
+    assert "HTTP 400" in result
+    assert "Provider detail: Invalid argument: unsupported setting" in result
+    assert "sensitive-test-key" not in result
+
+
 def test_gemini_assistant_calls_tenant_mcp_tools(monkeypatch):
     class FakeMcpSession:
         async def list_tools(self):

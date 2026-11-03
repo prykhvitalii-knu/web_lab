@@ -153,6 +153,20 @@ def test_recipe_book_end_to_end(running_app):
         page.get_by_text("Try a small dry-hop addition.").wait_for()
         assert page.locator("#assistant-status").inner_text() == "Answer complete."
 
+        page.unroute("**/api/assistant/stream")
+        page.route(
+            "**/api/assistant/stream",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="text/event-stream",
+                body='event: error\ndata: {"error":{"message":"Gemini rejected the request"}}\n\n',
+            ),
+        )
+        page.locator("#prompt").fill("Why did this fail?")
+        page.get_by_role("button", name="Ask the assistant").click()
+        page.get_by_text("Gemini rejected the request").wait_for()
+        assert page.locator("#assistant-status").inner_text() == "Gemini rejected the request"
+
         recipe_card.get_by_role("button", name="Edit recipe").click()
         assert page.locator("#recipe-editor-title").inner_text() == "Edit recipe"
         assert page.locator('#recipe-form [name="title"]').input_value() == "E2E Golden Ale"
