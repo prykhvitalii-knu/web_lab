@@ -25,7 +25,7 @@ Local Docker Compose demo (separate from AWS production stack):
 
 The static website bucket and upload bucket block public access. CloudFront reads the website bucket through Origin Access Control. The API runs on Lambda behind API Gateway; Lambda connects to a non-public RDS database in private subnets. The NAT Gateway provides outbound access for integrations. Runtime secrets are retrieved from AWS Secrets Manager.
 
-RabbitMQ, Redis, Celery, Telegram notifications, and the optional MCP server are demonstrated in the local Compose environment. They are **not** part of the AWS-hosted runtime. The live site is [akatosh.local-domain.party](https://akatosh.local-domain.party); the API's interactive documentation is at [api.akatosh.local-domain.party/docs](https://api.akatosh.local-domain.party/docs).
+RabbitMQ, Redis, Celery, Telegram notifications, and MCP are demonstrated in the local Compose environment. The assistant starts an MCP stdio client for the authenticated tenant and exposes read-only recipe tools to Gemini; the hosted AWS assistant does not start MCP. The live site is [akatosh.local-domain.party](https://akatosh.local-domain.party); the API's interactive documentation is at [api.akatosh.local-domain.party/docs](https://api.akatosh.local-domain.party/docs).
 
 ## Lab points and where to find them
 
@@ -46,6 +46,8 @@ RabbitMQ, Redis, Celery, Telegram notifications, and the optional MCP server are
 | **QA3 — Authentication testing** | Registration/login, protected routes, and Google OAuth callback tests. | `tests/test_api.py` |
 | **C6 — Bootstrap UI** | Responsive recipe-book landing page and account workspace. | `frontend/index.html`, `frontend/assets/app.js`, `frontend/assets/site.css` |
 | **C19 — Static content on AWS S3** | Static frontend assets are stored in S3 and delivered through CloudFront. | `terraform/main.tf`, `frontend/` |
+| **C21 — AI agent** | Gemini streams answers and visible progress updates, including when a tenant-scoped MCP recipe tool is called. | `app/main.py`, `frontend/assets/app.js` |
+| **C22 — MCP integration** | The local assistant connects to the MCP server over stdio and can call its read-only recipe tools; recipe creation remains an explicit MCP operation. | `app/mcp_agent.py`, `app/mcp_server.py`, `docker-compose.yml` |
 
 
 ### Video 3 — AWS architecture and static hosting

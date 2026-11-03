@@ -6,9 +6,11 @@ import uuid
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
+from contextlib import AsyncExitStack
 import boto3
 import httpx
 import redis
+from mcp.shared.exceptions import McpError
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Query, Form, Header
 from fastapi import Request
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
@@ -21,6 +23,12 @@ from starlette.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from . import models, schemas, database, auth, crud
+from .mcp_agent import (
+    READ_ONLY_TOOL_NAMES,
+    call_read_tool,
+    connect_to_mcp,
+    gemini_function_declarations,
+)
 from .telegram import send_telegram_notification
 from .worker import process_recipe_file_task, send_telegram_notification_task
 
@@ -430,73 +438,161 @@ def assistant_progress(message: str) -> str:
     return f"event: progress\ndata: {json.dumps({'message': message})}\n\n"
 
 
-async def stream_gemini_response(prompt: str):
+async def stream_gemini_response(prompt: str, tenant_id: str):
     api_key = os.getenv("GEMINI_API_KEY")
     model_name = os.getenv("GEMINI_MODEL") or "gemini-3.6-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent"
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-
     yield assistant_progress("Connecting to Gemini…")
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-            async with client.stream(
-                "POST",
-                url,
-                params={"alt": "sse"},
-                headers={"x-goog-api-key": api_key},
-                json=payload,
-            ) as response:
-                if response.is_error:
-                    if response.status_code in {401, 403}:
-                        message = (
-                            "Gemini rejected the API key or the key lacks API access "
-                            f"(HTTP {response.status_code}). Check the key and its "
-                            "Google AI API permissions."
-                        )
-                    elif response.status_code == 404:
-                        message = (
-                            f"Gemini model '{model_name}' was not found (HTTP 404). "
-                            "Check GEMINI_MODEL."
-                        )
-                    elif response.status_code == 429:
-                        message = (
-                            "Gemini quota or rate limit reached (HTTP 429). "
-                            "Check the project's API quota."
-                        )
-                    elif response.status_code == 402:
-                        message = (
-                            "Gemini requires payment or the project's prepaid "
-                            "credits may be depleted (HTTP 402). Check the "
-                            "Google AI Studio billing page and the billing "
-                            "status of the project that owns this API key. "
-                            "Creating another key in the same project may not help."
-                        )
-                    else:
-                        message = (
-                            "Gemini could not complete the request "
-                            f"(HTTP {response.status_code})."
-                        )
-                    await response.aread()
-                    yield assistant_error(message)
+        async with AsyncExitStack() as stack:
+            mcp_session = None
+            declarations = []
+            if os.getenv("MCP_AGENT_ENABLED", "").lower() == "true":
+                yield assistant_progress("Connecting to tenant recipe tools…")
+                try:
+                    mcp_session = await stack.enter_async_context(
+                        connect_to_mcp(tenant_id)
+                    )
+                    tools = await mcp_session.list_tools()
+                except (McpError, OSError, RuntimeError):
+                    yield assistant_error("The tenant recipe tools are unavailable.")
                     return
+                declarations = gemini_function_declarations(tools.tools)
+                if not declarations:
+                    raise RuntimeError("The MCP server exposes no read-only recipe tools")
+                yield assistant_progress("Connected to read-only recipe tools.")
 
-                yield assistant_progress("Gemini is generating a response…")
-                async for line in response.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-                    try:
-                        chunk = json.loads(line[6:])
-                        text = "".join(
-                            part.get("text", "")
-                            for candidate in chunk.get("candidates", [])
-                            for part in candidate.get("content", {}).get("parts", [])
-                        )
-                    except (json.JSONDecodeError, AttributeError, TypeError):
-                        yield assistant_error("The AI provider returned an invalid response.")
+            contents = [{"role": "user", "parts": [{"text": prompt}]}]
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(60.0, connect=10.0)
+            ) as client:
+                for turn in range(4):
+                    payload = {"contents": contents}
+                    if declarations:
+                        payload["tools"] = [{"functionDeclarations": declarations}]
+                        payload["systemInstruction"] = {
+                            "parts": [
+                                {
+                                    "text": (
+                                        "Use read-only recipe tools when the question asks "
+                                        "about this user's saved recipes or ingredients. "
+                                        "Do not invent recipe data."
+                                    )
+                                }
+                            ]
+                        }
+
+                    yield assistant_progress("Gemini is generating a response…")
+                    async with client.stream(
+                        "POST",
+                        url,
+                        params={"alt": "sse"},
+                        headers={"x-goog-api-key": api_key},
+                        json=payload,
+                    ) as response:
+                        if response.is_error:
+                            if response.status_code in {401, 403}:
+                                message = (
+                                    "Gemini rejected the API key or the key lacks API access "
+                                    f"(HTTP {response.status_code}). Check the key and its "
+                                    "Google AI API permissions."
+                                )
+                            elif response.status_code == 404:
+                                message = (
+                                    f"Gemini model '{model_name}' was not found (HTTP 404). "
+                                    "Check GEMINI_MODEL."
+                                )
+                            elif response.status_code == 429:
+                                message = (
+                                    "Gemini quota or rate limit reached (HTTP 429). "
+                                    "Check the project's API quota."
+                                )
+                            elif response.status_code == 402:
+                                message = (
+                                    "Gemini requires payment or the project's prepaid "
+                                    "credits may be depleted (HTTP 402). Check the "
+                                    "Google AI Studio billing page and the billing "
+                                    "status of the project that owns this API key. "
+                                    "Creating another key in the same project may not help."
+                                )
+                            else:
+                                message = (
+                                    "Gemini could not complete the request "
+                                    f"(HTTP {response.status_code})."
+                                )
+                            await response.aread()
+                            yield assistant_error(message)
+                            return
+
+                        model_parts = []
+                        function_calls = []
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            data = line[6:]
+                            if data == "[DONE]":
+                                continue
+                            try:
+                                chunk = json.loads(data)
+                                parts = [
+                                    part
+                                    for candidate in chunk.get("candidates", [])
+                                    for part in candidate.get("content", {}).get("parts", [])
+                                ]
+                            except (json.JSONDecodeError, AttributeError, TypeError):
+                                yield assistant_error(
+                                    "The AI provider returned an invalid response."
+                                )
+                                return
+                            for part in parts:
+                                if "text" in part:
+                                    model_parts.append({"text": part["text"]})
+                                    yield f"data: {json.dumps({'text': part['text']})}\n\n"
+                                elif "functionCall" in part:
+                                    function_call = part["functionCall"]
+                                    model_parts.append({"functionCall": function_call})
+                                    function_calls.append(function_call)
+
+                    if not function_calls:
+                        yield "event: done\ndata: {}\n\n"
                         return
-                    if text:
-                        yield f"data: {json.dumps({'text': text})}\n\n"
-        yield "event: done\ndata: {}\n\n"
+                    if mcp_session is None or turn == 3:
+                        yield assistant_error("The assistant reached its MCP tool-call limit.")
+                        return
+
+                    contents.append({"role": "model", "parts": model_parts})
+                    for function_call in function_calls:
+                        name = function_call.get("name", "")
+                        if name not in READ_ONLY_TOOL_NAMES:
+                            yield assistant_error(
+                                f"The assistant requested an unavailable MCP tool: {name}."
+                            )
+                            return
+                        yield assistant_progress(
+                            f"Using recipe tool: {name.replace('_', ' ')}…"
+                        )
+                        try:
+                            result = await call_read_tool(
+                                mcp_session,
+                                name,
+                                function_call.get("args", {}),
+                            )
+                        except (McpError, OSError, RuntimeError, ValueError) as exc:
+                            yield assistant_error(str(exc))
+                            return
+                        contents.append(
+                            {
+                                "role": "user",
+                                "parts": [
+                                    {
+                                        "functionResponse": {
+                                            "name": name,
+                                            "response": {"result": result},
+                                        }
+                                    }
+                                ],
+                            }
+                        )
     except httpx.HTTPError:
         yield assistant_error("The AI provider is temporarily unavailable.")
 
@@ -518,7 +614,7 @@ def stream_assistant_response(
             detail="AI suggestions are not configured",
         )
     return StreamingResponse(
-        stream_gemini_response(request_data.prompt),
+        stream_gemini_response(request_data.prompt, current_user.tenant_id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

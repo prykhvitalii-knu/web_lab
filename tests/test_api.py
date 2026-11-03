@@ -1,4 +1,7 @@
 import asyncio
+import json
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
@@ -139,8 +142,9 @@ def test_ai_assistant_streams_sse_when_enabled(monkeypatch):
     )
     assert enabled.status_code == 200
 
-    async def fake_gemini_stream(prompt):
+    async def fake_gemini_stream(prompt, tenant_id):
         assert prompt == "How do I dry hop an IPA?"
+        assert tenant_id
         yield 'event: progress\ndata: {"message": "Connecting to Gemini…"}\n\n'
         yield 'event: progress\ndata: {"message": "Gemini is generating a response…"}\n\n'
         yield 'data: {"text": "Add hops"}\n\n'
@@ -416,12 +420,19 @@ def test_gemini_stream_uses_current_default_model(monkeypatch):
 
     monkeypatch.setenv("GEMINI_API_KEY", "test-api-key")
     monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.delenv("MCP_AGENT_ENABLED", raising=False)
     monkeypatch.setattr(main_module.httpx, "AsyncClient", FakeClient)
 
     async def collect():
-        return [chunk async for chunk in main_module.stream_gemini_response("Ales")]
+        return [
+            chunk
+            async for chunk in main_module.stream_gemini_response("Ales", "tenant-a")
+        ]
 
-    assert asyncio.run(collect()) == ['data: {"text": "Brew answer"}\n\n', "event: done\ndata: {}\n\n"]
+    result = asyncio.run(collect())
+    assert 'data: {"text": "Brew answer"}\n\n' in result
+    assert result[-1] == "event: done\ndata: {}\n\n"
+    assert any("Gemini is generating" in event for event in result)
 
 
 def test_gemini_payment_error_points_to_billing(monkeypatch):
@@ -452,15 +463,133 @@ def test_gemini_payment_error_points_to_billing(monkeypatch):
             return FakeResponse()
 
     monkeypatch.setenv("GEMINI_API_KEY", "test-api-key")
+    monkeypatch.delenv("MCP_AGENT_ENABLED", raising=False)
     monkeypatch.setattr(main_module.httpx, "AsyncClient", FakeClient)
 
     async def collect():
-        return [chunk async for chunk in main_module.stream_gemini_response("Ales")]
+        return [
+            chunk
+            async for chunk in main_module.stream_gemini_response("Ales", "tenant-a")
+        ]
 
     result = "".join(asyncio.run(collect()))
     assert "HTTP 402" in result
     assert "prepaid credits may be depleted" in result
     assert "Google AI Studio billing page" in result
+
+
+def test_gemini_assistant_calls_tenant_mcp_tools(monkeypatch):
+    class FakeMcpSession:
+        async def list_tools(self):
+            return SimpleNamespace(
+                tools=[
+                    SimpleNamespace(
+                        name="list_recipes",
+                        description="List recipes",
+                        inputSchema={
+                            "type": "object",
+                            "properties": {"limit": {"type": "integer"}},
+                        },
+                    )
+                ]
+            )
+
+        async def call_tool(self, name, arguments):
+            assert name == "list_recipes"
+            assert arguments == {"skip": 0, "limit": 10}
+            return SimpleNamespace(
+                isError=False,
+                structuredContent=None,
+                content=[SimpleNamespace(text='{"items": [{"title": "Pale Ale"}]}')],
+            )
+
+    class FakeResponse:
+        is_error = False
+
+        def __init__(self, chunk):
+            self.chunk = chunk
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def aiter_lines(self):
+            yield f"data: {json.dumps(self.chunk)}"
+
+    class FakeClient:
+        payloads = []
+        chunks = [
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "name": "list_recipes",
+                                        "args": {"skip": 0, "limit": 10},
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            {
+                "candidates": [
+                    {"content": {"parts": [{"text": "Your Pale Ale recipe is ready."}]}}
+                ]
+            },
+        ]
+
+        def __init__(self, **kwargs):
+            self.chunk_index = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def stream(self, method, url, **kwargs):
+            self.payloads.append(kwargs["json"])
+            chunk = self.chunks[self.chunk_index]
+            self.chunk_index += 1
+            return FakeResponse(chunk)
+
+    connected_tenants = []
+    session = FakeMcpSession()
+
+    @asynccontextmanager
+    async def fake_connect_to_mcp(tenant_id):
+        connected_tenants.append(tenant_id)
+        yield session
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-api-key")
+    monkeypatch.setenv("MCP_AGENT_ENABLED", "true")
+    monkeypatch.setattr(main_module, "connect_to_mcp", fake_connect_to_mcp)
+    monkeypatch.setattr(main_module.httpx, "AsyncClient", FakeClient)
+    FakeClient.payloads.clear()
+
+    async def collect():
+        return [
+            event
+            async for event in main_module.stream_gemini_response(
+                "What recipes have I saved?", "tenant-private"
+            )
+        ]
+
+    events = asyncio.run(collect())
+    assert connected_tenants == ["tenant-private"]
+    assert any("Using recipe tool: list recipes" in event for event in events)
+    assert any("Your Pale Ale recipe is ready." in event for event in events)
+    assert FakeClient.payloads[0]["tools"][0]["functionDeclarations"][0]["name"] == "list_recipes"
+    assert (
+        FakeClient.payloads[1]["contents"][-1]["parts"][0]["functionResponse"]["name"]
+        == "list_recipes"
+    )
 
 
 def test_recipe_file_upload_and_tenant_scoped_download(monkeypatch, tmp_path):
