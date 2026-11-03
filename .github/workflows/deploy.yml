@@ -177,5 +177,5 @@ jobs:
           export PUBLIC_API_BASE_URL="$(terraform -chdir=terraform output -raw api_base_url)"
           export PUBLIC_SITE_URL="$(terraform -chdir=terraform output -raw website_url)"
           export distribution_id="$(terraform -chdir=terraform output -raw cloudfront_distribution_id)"
-          python scripts/publish_static_site.py
+          python -m scripts.publish_static_site
           aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths "/*"
