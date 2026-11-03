@@ -22,7 +22,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
-from . import models, schemas, database, auth, crud
+from . import models, schemas, database, auth, crud, seo
 from .mcp_agent import (
     READ_ONLY_TOOL_NAMES,
     call_read_tool,
@@ -96,21 +96,15 @@ def frontend_config():
 
 
 @app.get("/robots.txt")
-def robots_txt():
-    return FileResponse(FRONTEND_DIR / "robots.txt", media_type="text/plain")
+def robots_txt(request: Request):
+    base_url = os.getenv("PUBLIC_SITE_URL", str(request.base_url)).rstrip("/")
+    return Response(seo.build_robots_txt(base_url), media_type="text/plain")
 
 
 @app.get("/sitemap.xml")
 def sitemap_xml(request: Request):
     base_url = os.getenv("PUBLIC_SITE_URL", str(request.base_url).rstrip("/"))
-    sitemap = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-        f"<url><loc>{base_url.rstrip('/')}/</loc>"
-        "<changefreq>weekly</changefreq><priority>1.0</priority></url>"
-        "</urlset>"
-    )
-    return Response(sitemap, media_type="application/xml")
+    return Response(seo.build_sitemap_xml(base_url), media_type="application/xml")
 
 
 @app.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)

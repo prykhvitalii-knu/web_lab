@@ -5,6 +5,8 @@ from pathlib import Path
 
 import boto3
 
+from app import seo
+
 
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
@@ -34,6 +36,32 @@ def main() -> None:
         }
         if key == "index.html":
             extra_args["CacheControl"] = "public, max-age=60"
+            body = seo.rewrite_index_canonical_url(
+                path.read_text(encoding="utf-8"), site_url
+            ).encode()
+            s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=body,
+                **extra_args,
+            )
+            continue
+        if key == "robots.txt":
+            s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=seo.build_robots_txt(site_url).encode(),
+                **extra_args,
+            )
+            continue
+        if key == "sitemap.xml":
+            s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=seo.build_sitemap_xml(site_url).encode(),
+                **extra_args,
+            )
+            continue
         s3.upload_file(str(path), bucket, key, ExtraArgs=extra_args)
 
     s3.put_object(
@@ -52,20 +80,6 @@ def main() -> None:
         ).encode(),
         ContentType="application/javascript",
         CacheControl="no-store",
-    )
-    sitemap = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-        f"<url><loc>{site_url.rstrip('/')}/</loc>"
-        "<changefreq>weekly</changefreq><priority>1.0</priority></url>"
-        "</urlset>"
-    )
-    s3.put_object(
-        Bucket=bucket,
-        Key="sitemap.xml",
-        Body=sitemap.encode(),
-        ContentType="application/xml",
-        CacheControl="public, max-age=300",
     )
 
 

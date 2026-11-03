@@ -46,6 +46,7 @@ RabbitMQ, Redis, Celery, Telegram notifications, and MCP are demonstrated in the
 | **QA3 — Authentication testing** | Registration/login, protected routes, and Google OAuth callback tests. | `tests/test_api.py` |
 | **C6 — Bootstrap UI** | Responsive recipe-book landing page and account workspace. | `frontend/index.html`, `frontend/assets/app.js`, `frontend/assets/site.css` |
 | **C19 — Static content on AWS S3** | Static frontend assets are stored in S3 and delivered through CloudFront. | `terraform/main.tf`, `frontend/` |
+| **C7 — SEO** | The public homepage has an absolute canonical and social URL; `robots.txt` points to an absolute sitemap. Private tenant recipes are intentionally excluded. Automated tests validate the generated files, but Search Console indexing still needs external verification. | `app/seo.py`, `scripts/publish_static_site.py`, `frontend/` |
 | **C21 — AI agent** | Gemini streams answers and visible progress updates, including when a tenant-scoped MCP recipe tool is called. | `app/main.py`, `frontend/assets/app.js` |
 | **C22 — MCP integration** | The local assistant connects to the MCP server over stdio and can call its read-only recipe tools; recipe creation remains an explicit MCP operation. | `app/mcp_agent.py`, `app/mcp_server.py`, `docker-compose.yml` |
 

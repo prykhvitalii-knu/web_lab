@@ -121,9 +121,13 @@ def test_landing_page_seo_and_public_config():
     assert page.status_code == 200
     assert "name=\"description\"" in page.text
     assert client.get("/robots.txt").status_code == 200
+    assert "Sitemap: http://testserver/sitemap.xml" in client.get(
+        "/robots.txt"
+    ).text
     sitemap = client.get("/sitemap.xml")
     assert sitemap.status_code == 200
     assert "<loc>http://testserver/</loc>" in sitemap.text
+    assert "property=\"og:url\"" in page.text
     config = client.get("/config.js")
     assert config.status_code == 200
     assert "googleAnalyticsId" in config.text

@@ -54,7 +54,9 @@ async function apiRequest(path, options = {}) {
 }
 
 document.querySelector("#google-login").href = apiUrl("/auth/google/login");
-document.querySelector('link[rel="canonical"]').href = `${window.location.origin}/`;
+const canonicalUrl = `${window.location.origin}/`;
+document.querySelector('link[rel="canonical"]').href = canonicalUrl;
+document.querySelector('meta[property="og:url"]').content = canonicalUrl;
 
 function addIngredientRow(values = {}) {
   const row = document.createElement("div");
