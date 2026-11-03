@@ -89,6 +89,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate AWS deployment configuration
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          SECRET_KEY: ${{ secrets.APP_SECRET_KEY }}
+          FEATURE_ADMIN_TOKEN: ${{ secrets.FEATURE_ADMIN_TOKEN }}
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          GITHUB_OIDC_PROVIDER_ARN: ${{ vars.GITHUB_OIDC_PROVIDER_ARN }}
+        run: |
+          test -n "$AWS_ROLE_ARN" || { echo "Set repository secret AWS_ROLE_ARN"; exit 1; }
+          test -n "$SECRET_KEY" || { echo "Set repository secret APP_SECRET_KEY"; exit 1; }
+          test -n "$FEATURE_ADMIN_TOKEN" || { echo "Set repository secret FEATURE_ADMIN_TOKEN"; exit 1; }
+          test -n "$TF_STATE_BUCKET" || { echo "Set repository variable TF_STATE_BUCKET"; exit 1; }
+          test -n "$GITHUB_OIDC_PROVIDER_ARN" || { echo "Set repository variable GITHUB_OIDC_PROVIDER_ARN"; exit 1; }
+
       - name: Configure AWS credentials using GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
