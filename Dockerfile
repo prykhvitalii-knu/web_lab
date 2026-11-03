@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# 1. Оптимізація роботи Python в контейнері
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 

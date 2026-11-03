@@ -7,9 +7,23 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+psycopg2://akatosh_user:akatosh_password@akatosh-db:5432/akatosh_db
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:?set_POSTGRES_USER}:${POSTGRES_PASSWORD:?set_POSTGRES_PASSWORD}@akatosh-db:5432/akatosh_db
       - REDIS_URL=redis://akatosh-redis:6379/0
-      - RABBITMQ_URL=amqp://akatosh_user:akatosh_password@akatosh-rabbitmq:5672//
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER:?set_RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS:?set_RABBITMQ_DEFAULT_PASS}@akatosh-rabbitmq:5672//
+      - FEATURE_ADMIN_TOKEN=${FEATURE_ADMIN_TOKEN:-}
+      - SECRET_KEY=${SECRET_KEY:?set_SECRET_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
+      - SESSION_HTTPS_ONLY=${SESSION_HTTPS_ONLY:-false}
+      - GOOGLE_ANALYTICS_ID=${GOOGLE_ANALYTICS_ID:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.6-flash}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL:-}
+      - PUBLIC_SITE_URL=${PUBLIC_SITE_URL:-}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -27,12 +41,15 @@ services:
       dockerfile: Dockerfile
     container_name: akatosh_worker
     command: celery -A app.worker.celery_app worker --loglevel=info
+    healthcheck:
+      disable: true
     environment:
-      - DATABASE_URL=postgresql+psycopg2://akatosh_user:akatosh_password@akatosh-db:5432/akatosh_db
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:?set_POSTGRES_USER}:${POSTGRES_PASSWORD:?set_POSTGRES_PASSWORD}@akatosh-db:5432/akatosh_db
       - REDIS_URL=redis://akatosh-redis:6379/0
-      - RABBITMQ_URL=amqp://akatosh_user:akatosh_password@akatosh-rabbitmq:5672//
-      - TELEGRAM_BOT_TOKEN=9160567376:AAE1bymo2z7sNvG-KoIJbk8r6ItbnO32vfs
-      - TELEGRAM_CHAT_ID=1273270782
+      - RABBITMQ_URL=amqp://${RABBITMQ_DEFAULT_USER:?set_RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS:?set_RABBITMQ_DEFAULT_PASS}@akatosh-rabbitmq:5672//
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -40,17 +57,28 @@ services:
         condition: service_healthy
     restart: always
 
-  # Брокер черг повідомлень RabbitMQ для вимоги B8
+  akatosh-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: akatosh_mcp
+    command: ["python", "-m", "app.mcp_server"]
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:?set_POSTGRES_USER}:${POSTGRES_PASSWORD:?set_POSTGRES_PASSWORD}@akatosh-db:5432/akatosh_db
+      - MCP_TENANT_ID=${MCP_TENANT_ID:?set_MCP_TENANT_ID}
+    profiles: ["mcp"]
+    stdin_open: true
+    tty: true
+    depends_on:
+      akatosh-db:
+        condition: service_healthy
+
   akatosh-rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: akatosh_rabbitmq
     environment:
-      POSTGRES_USER: akatosh_user
-      RABBITMQ_DEFAULT_USER: akatosh_user
-      RABBITMQ_DEFAULT_PASS: akatosh_password
-    ports:
-      - "5672:5672"    # AMQP порт для надсилання повідомлень
-      - "15672:15672"  # Management Web UI порт
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_DEFAULT_USER:?set_RABBITMQ_DEFAULT_USER}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_DEFAULT_PASS:?set_RABBITMQ_DEFAULT_PASS}"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -62,15 +90,15 @@ services:
     image: postgres:15-alpine
     container_name: akatosh_db
     environment:
-      POSTGRES_USER: akatosh_user
-      POSTGRES_PASSWORD: akatosh_password
+      POSTGRES_USER: "${POSTGRES_USER:?set_POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set_POSTGRES_PASSWORD}"
       POSTGRES_DB: akatosh_db
     ports:
       - "5433:5432"
     volumes:
       - postgres_akatosh_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U akatosh_user -d akatosh_db"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d akatosh_db"]
       interval: 5s
       timeout: 5s
       retries: 5

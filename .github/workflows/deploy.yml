@@ -2,26 +2,167 @@ name: Akatosh CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      confirm_deployment:
+        description: "Confirm the Terraform plan and estimated AWS costs have been reviewed."
+        required: true
+        type: boolean
+        default: false
 
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
+    env:
+      POSTGRES_USER: ci_user
+      POSTGRES_PASSWORD: ci-password-not-used-for-tests
+      RABBITMQ_DEFAULT_USER: ci_user
+      RABBITMQ_DEFAULT_PASS: ci-password-not-used-for-tests
+      SECRET_KEY: ci-secret-key-for-tests-only-32-characters
+      FEATURE_ADMIN_TOKEN: ci-admin-token-for-tests
+      MCP_TENANT_ID: ci-tenant
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-python-version: '3.11'
+        python-version: '3.12'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
 
-    - name: Run Docker Compose build test
+    - name: Install Chromium for browser tests
+      run: python -m playwright install --with-deps chromium
+
+    - name: Run unit tests
+      run: pytest tests/unit -q
+
+    - name: Run API and end-to-end tests
+      run: pytest -q
+
+    - name: Build Docker images
+      run: docker compose build
+
+    - name: Package Lambda deployment artifact
+      run: bash lambda/package.sh
+
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.10.5
+
+    - name: Validate Terraform configuration
       run: |
-        docker compose build
+        terraform fmt -check -recursive
+        terraform -chdir=terraform init -backend=false -input=false
+        terraform -chdir=terraform/bootstrap init -backend=false -input=false
+        terraform -chdir=terraform validate
+        terraform -chdir=terraform/bootstrap validate
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_deployment
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      SECRET_KEY: ${{ secrets.APP_SECRET_KEY }}
+      FEATURE_ADMIN_TOKEN: ${{ secrets.FEATURE_ADMIN_TOKEN }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.6-flash' }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      GOOGLE_ANALYTICS_ID: ${{ vars.GOOGLE_ANALYTICS_ID }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      GITHUB_OIDC_PROVIDER_ARN: ${{ vars.GITHUB_OIDC_PROVIDER_ARN }}
+      ENABLE_CUSTOM_DOMAINS: ${{ vars.ENABLE_CUSTOM_DOMAINS || 'false' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deployment helper
+        run: python -m pip install boto3
+
+      - name: Package serverless API
+        run: |
+          test -n "$SECRET_KEY" || { echo "Set repository secret APP_SECRET_KEY"; exit 1; }
+          test -n "$FEATURE_ADMIN_TOKEN" || { echo "Set repository secret FEATURE_ADMIN_TOKEN"; exit 1; }
+          test -n "$GITHUB_OIDC_PROVIDER_ARN" || { echo "Set repository variable GITHUB_OIDC_PROVIDER_ARN"; exit 1; }
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Set repository secret TELEGRAM_CHAT_ID when TELEGRAM_BOT_TOKEN is configured"
+            exit 1
+          fi
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            echo "Set repository secret TELEGRAM_BOT_TOKEN when TELEGRAM_CHAT_ID is configured"
+            exit 1
+          fi
+          bash lambda/package.sh
+
+      - name: Initialize Terraform state backend
+        run: |
+          test -n "$TF_STATE_BUCKET" || { echo "Set repository variable TF_STATE_BUCKET"; exit 1; }
+          test -n "$AWS_REGION" || { echo "Set repository variable AWS_REGION"; exit 1; }
+          terraform -chdir=terraform init -input=false \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=akatosh/terraform.tfstate" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+
+      - name: Apply Terraform infrastructure
+        run: |
+          terraform -chdir=terraform apply -input=false -auto-approve \
+            -var="aws_region=$AWS_REGION" \
+            -var="terraform_state_bucket=$TF_STATE_BUCKET" \
+            -var="github_oidc_provider_arn=$GITHUB_OIDC_PROVIDER_ARN" \
+            -var="enable_custom_domains=$ENABLE_CUSTOM_DOMAINS"
+
+      - name: Store runtime secrets outside Terraform state
+        run: |
+          export APP_SECRETS_ARN="$(terraform -chdir=terraform output -raw app_secret_arn)"
+          export API_BASE_URL="$(terraform -chdir=terraform output -raw api_base_url)"
+          export PUBLIC_SITE_URL="$(terraform -chdir=terraform output -raw website_url)"
+          export PUBLIC_API_BASE_URL="$API_BASE_URL"
+          export RDS_MASTER_SECRET_ARN="$(terraform -chdir=terraform output -raw database_master_secret_arn)"
+          export RDS_HOST="$(terraform -chdir=terraform output -raw database_endpoint)"
+          export RDS_PORT="$(terraform -chdir=terraform output -raw database_port)"
+          export RDS_DATABASE_NAME="$(terraform -chdir=terraform output -raw database_name)"
+          export GOOGLE_REDIRECT_URI="${API_BASE_URL%/}/auth/google/callback"
+          python scripts/set_cloud_secrets.py
+
+      - name: Publish static website to private S3 behind CloudFront
+        run: |
+          export STATIC_SITE_BUCKET="$(terraform -chdir=terraform output -raw website_bucket)"
+          export PUBLIC_API_BASE_URL="$(terraform -chdir=terraform output -raw api_base_url)"
+          export PUBLIC_SITE_URL="$(terraform -chdir=terraform output -raw website_url)"
+          export distribution_id="$(terraform -chdir=terraform output -raw cloudfront_distribution_id)"
+          python scripts/publish_static_site.py
+          aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths "/*"
