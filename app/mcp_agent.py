@@ -6,6 +6,7 @@ from typing import AsyncIterator
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.shared.exceptions import McpError
 from mcp.types import Tool
 
 
@@ -37,10 +38,13 @@ async def connect_to_mcp(tenant_id: str) -> AsyncIterator[ClientSession]:
         env=server_environment,
         cwd=project_root,
     )
-    async with stdio_client(server) as (read_stream, write_stream):
-        async with ClientSession(read_stream, write_stream) as session:
-            await session.initialize()
-            yield session
+    try:
+        async with stdio_client(server) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                yield session
+    except McpError as exc:
+        raise RuntimeError("The MCP recipe server could not be reached") from exc
 
 
 def gemini_function_declarations(tools: list[Tool]) -> list[dict]:
@@ -60,7 +64,10 @@ async def call_read_tool(
 ) -> object:
     if name not in READ_ONLY_TOOL_NAMES:
         raise ValueError(f"MCP tool '{name}' is not available to the assistant")
-    result = await session.call_tool(name, arguments)
+    try:
+        result = await session.call_tool(name, arguments)
+    except McpError as exc:
+        raise RuntimeError(f"MCP tool '{name}' could not be completed") from exc
     if result.isError:
         raise RuntimeError(f"MCP tool '{name}' failed")
     if result.structuredContent is not None:

@@ -10,7 +10,6 @@ from contextlib import AsyncExitStack
 import boto3
 import httpx
 import redis
-from mcp.shared.exceptions import McpError
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Query, Form, Header
 from fastapi import Request
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
@@ -23,12 +22,6 @@ from starlette.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from . import models, schemas, database, auth, crud, seo
-from .mcp_agent import (
-    READ_ONLY_TOOL_NAMES,
-    call_read_tool,
-    connect_to_mcp,
-    gemini_function_declarations,
-)
 from .telegram import send_telegram_notification
 from .worker import process_recipe_file_task, send_telegram_notification_task
 
@@ -441,7 +434,18 @@ async def stream_gemini_response(prompt: str, tenant_id: str):
         async with AsyncExitStack() as stack:
             mcp_session = None
             declarations = []
+            read_tool_names = frozenset()
             if os.getenv("MCP_AGENT_ENABLED", "").lower() == "true":
+                from mcp.shared.exceptions import McpError
+
+                from .mcp_agent import (
+                    READ_ONLY_TOOL_NAMES,
+                    call_read_tool,
+                    connect_to_mcp,
+                    gemini_function_declarations,
+                )
+
+                read_tool_names = READ_ONLY_TOOL_NAMES
                 yield assistant_progress("Connecting to tenant recipe tools…")
                 try:
                     mcp_session = await stack.enter_async_context(
@@ -557,7 +561,7 @@ async def stream_gemini_response(prompt: str, tenant_id: str):
                     contents.append({"role": "model", "parts": model_parts})
                     for function_call in function_calls:
                         name = function_call.get("name", "")
-                        if name not in READ_ONLY_TOOL_NAMES:
+                        if name not in read_tool_names:
                             yield assistant_error(
                                 f"The assistant requested an unavailable MCP tool: {name}."
                             )
@@ -571,7 +575,7 @@ async def stream_gemini_response(prompt: str, tenant_id: str):
                                 name,
                                 function_call.get("args", {}),
                             )
-                        except (McpError, OSError, RuntimeError, ValueError) as exc:
+                        except (OSError, RuntimeError, ValueError) as exc:
                             yield assistant_error(str(exc))
                             return
                         contents.append(

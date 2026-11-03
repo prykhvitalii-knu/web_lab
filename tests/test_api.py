@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import main as main_module
+from app import main as main_module, mcp_agent
 from app.main import app
 from app.database import Base, get_db
 
@@ -573,7 +573,7 @@ def test_gemini_assistant_calls_tenant_mcp_tools(monkeypatch):
 
     monkeypatch.setenv("GEMINI_API_KEY", "test-api-key")
     monkeypatch.setenv("MCP_AGENT_ENABLED", "true")
-    monkeypatch.setattr(main_module, "connect_to_mcp", fake_connect_to_mcp)
+    monkeypatch.setattr(mcp_agent, "connect_to_mcp", fake_connect_to_mcp)
     monkeypatch.setattr(main_module.httpx, "AsyncClient", FakeClient)
     FakeClient.payloads.clear()
 
