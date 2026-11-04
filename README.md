@@ -52,29 +52,6 @@ Browser sign-in uses an HttpOnly JWT cookie, so refreshes restore the session wi
 | **C21 — AI agent** | Gemini streams answers and visible progress updates, including when a tenant-scoped MCP recipe tool is called. | `app/main.py`, `frontend/assets/app.js` |
 | **C22 — MCP integration** | The local assistant connects to the MCP server over stdio, preserves Gemini tool-call signatures across turns, and can call its read-only recipe tools; recipe creation remains an explicit MCP operation. | `app/main.py`, `app/mcp_agent.py`, `app/mcp_server.py`, `docker-compose.yml` |
 
-
-### Video 3 — AWS architecture and static hosting
-
-1. Trace the browser request: CloudFront serves the static frontend from the private S3 origin (**C19**).
-2. Trace an API request: API Gateway invokes Lambda, which accesses private RDS and the private uploads bucket.
-3. Show the VPC's public/private subnets, Lambda-to-RDS security boundary, NAT egress, and Secrets Manager role in the architecture.
-4. Briefly show the Terraform resource definitions that describe the hosted network, compute, database, storage, and access boundaries.
-5. Revisit the live site and API docs to connect the hosted application to the earlier feature demonstrations.
-
-## Tests
-
-Run the mandatory unit tests separately:
-
-```sh
-python -m pytest tests/unit -q
-```
-
-Run the complete test suite:
-
-```sh
-python -m pytest -q
-```
-
 ## Repository map
 
 ```text
