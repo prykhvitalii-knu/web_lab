@@ -621,11 +621,11 @@ async def stream_gemini_response(prompt: str, tenant_id: str):
                                 return
                             for part in parts:
                                 if "text" in part:
-                                    model_parts.append({"text": part["text"]})
+                                    model_parts.append(part)
                                     yield f"data: {json.dumps({'text': part['text']})}\n\n"
                                 elif "functionCall" in part:
                                     function_call = part["functionCall"]
-                                    model_parts.append({"functionCall": function_call})
+                                    model_parts.append(part)
                                     function_calls.append(function_call)
 
                     if not function_calls:

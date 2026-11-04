@@ -629,7 +629,8 @@ def test_gemini_assistant_calls_tenant_mcp_tools(monkeypatch):
                                     "functionCall": {
                                         "name": "list_recipes",
                                         "args": {"skip": 0, "limit": 10},
-                                    }
+                                    },
+                                    "thoughtSignature": "tool-call-signature",
                                 }
                             ]
                         }
@@ -688,6 +689,12 @@ def test_gemini_assistant_calls_tenant_mcp_tools(monkeypatch):
     assert (
         FakeClient.payloads[1]["contents"][-1]["parts"][0]["functionResponse"]["name"]
         == "list_recipes"
+    )
+    model_tool_call = FakeClient.payloads[1]["contents"][-2]
+    assert model_tool_call["role"] == "model"
+    assert (
+        model_tool_call["parts"][0]["thoughtSignature"]
+        == "tool-call-signature"
     )
 
 
