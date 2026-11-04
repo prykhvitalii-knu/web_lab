@@ -56,17 +56,19 @@ async function apiRequest(path, options = {}) {
   const isFormData = options.body instanceof FormData;
   const requestHeaders = new Headers(options.headers);
   requestHeaders.delete("Authorization");
+  if (!isFormData && options.body && !requestHeaders.has("Content-Type")) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
+  if (
+    csrfToken &&
+    !["GET", "HEAD", "OPTIONS"].includes((options.method || "GET").toUpperCase())
+  ) {
+    requestHeaders.set("X-CSRF-Token", csrfToken);
+  }
   const response = await fetch(apiUrl(path), {
     ...options,
     credentials: "include",
-    headers: {
-      ...(!isFormData && options.body ? { "Content-Type": "application/json" } : {}),
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...Object.fromEntries(requestHeaders.entries()),
-      ...(csrfToken && !["GET", "HEAD", "OPTIONS"].includes((options.method || "GET").toUpperCase())
-        ? { "X-CSRF-Token": csrfToken }
-        : {}),
-    },
+    headers: requestHeaders,
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));

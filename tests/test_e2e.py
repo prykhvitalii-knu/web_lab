@@ -136,6 +136,15 @@ def test_recipe_book_end_to_end(running_app):
         ).click()
         detail_modal.wait_for(state="hidden")
 
+        assistant_request_content_types = []
+        page.on(
+            "request",
+            lambda request: assistant_request_content_types.append(
+                request.headers.get("content-type")
+            )
+            if request.url.endswith("/api/assistant/stream")
+            else None,
+        )
         page.route(
             "**/api/assistant/stream",
             lambda route: route.fulfill(
@@ -152,6 +161,7 @@ def test_recipe_book_end_to_end(running_app):
         page.get_by_role("button", name="Ask the assistant").click()
         page.get_by_text("Try a small dry-hop addition.").wait_for()
         assert page.locator("#assistant-status").inner_text() == "Answer complete."
+        assert assistant_request_content_types == ["application/json"]
 
         page.unroute("**/api/assistant/stream")
         page.route(
