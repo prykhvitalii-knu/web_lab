@@ -33,7 +33,9 @@ resource "aws_iam_role" "github_actions" {
         StringLike = {
           "${local.github_oidc_issuer}:sub" = [
             "repo:${var.github_repository}:ref:refs/heads/main",
-            "repo:prykhvitalii-knu@233604645/web_lab@1438250440:ref:refs/heads/main"
+            "repo:prykhvitalii-knu@233604645/web_lab@1438250440:ref:refs/heads/main",
+            "repo:${var.github_repository}:environment:GOOGLE_ANALYTICS_ID",
+            "repo:prykhvitalii-knu@233604645/web_lab@1438250440:environment:GOOGLE_ANALYTICS_ID"
           ]
         }
       }

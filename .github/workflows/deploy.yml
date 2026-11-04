@@ -68,9 +68,52 @@ jobs:
         terraform -chdir=terraform validate
         terraform -chdir=terraform/bootstrap validate
 
-  deploy:
+  prepare-environment-oidc:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'akatosh-tf-state-528701451212-us-east-1' }}
+      GITHUB_OIDC_PROVIDER_ARN: ${{ vars.GITHUB_OIDC_PROVIDER_ARN || 'arn:aws:iam::528701451212:oidc-provider/token.actions.githubusercontent.com' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials using branch OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN || secrets.AWS_ROLE_ARN || 'arn:aws:iam::528701451212:role/akatosh-demo-github-deploy' }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.5
+
+      - name: Initialize Terraform state backend
+        run: |
+          terraform -chdir=terraform init -input=false \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=akatosh/terraform.tfstate" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+
+      - name: Allow the deployment environment OIDC subject
+        run: |
+          terraform -chdir=terraform apply -input=false -auto-approve \
+            -target=aws_iam_role.github_actions \
+            -var="aws_region=$AWS_REGION" \
+            -var="terraform_state_bucket=$TF_STATE_BUCKET" \
+            -var="github_oidc_provider_arn=$GITHUB_OIDC_PROVIDER_ARN"
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [test, prepare-environment-oidc]
     runs-on: ubuntu-latest
     environment: GOOGLE_ANALYTICS_ID
     concurrency:
