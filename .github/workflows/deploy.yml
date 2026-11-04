@@ -72,6 +72,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: test
     runs-on: ubuntu-latest
+    environment: GOOGLE_ANALYTICS_ID
     concurrency:
       group: akatosh-production-deploy
       cancel-in-progress: false
